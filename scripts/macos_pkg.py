@@ -212,8 +212,13 @@ def package(app, output, previous_helper_recovery=None):
     if previous_pin == pin:
         raise ValueError("Previous helper recovery is only needed for a different certificate")
     revision = run('git', '-C', ROOT, 'rev-parse', 'HEAD')
+    identity_path = app / 'Contents/Resources/perroute-build.json'
+    build_identity = json.loads(identity_path.read_text()) if identity_path.exists() else None
+    if build_identity and build_identity['sourceRevision'] != revision:
+        raise ValueError('App build identity does not match the source revision being packaged')
     output.mkdir(parents=True, exist_ok=True)
-    package_name = f'PerRoute-{version}-macos-{architecture}-preview.pkg'
+    build_suffix = '-' + build_identity['buildId'] if build_identity else ''
+    package_name = f'PerRoute-{version}{build_suffix}-macos-{architecture}-preview.pkg'
     with tempfile.TemporaryDirectory(prefix='.pkg-', dir=output) as temporary:
         work = Path(temporary)
         payload = work / 'payload'
@@ -276,6 +281,8 @@ def package(app, output, previous_helper_recovery=None):
                     'signingCertificateSha1': pin, 'developerIdSigned': False,
                     'installerSigned': False, 'notarized': False, 'routingEngine': provenance,
                     'installsHelper': True, 'previousHelperCertificateSha1': previous_pin}
+        if build_identity:
+            metadata['buildIdentity'] = build_identity
         (output / 'BUILD.json').write_text(json.dumps(metadata, indent=2) + '\n')
         (output / 'INSTALL.txt').write_text(install_instructions())
         (output / 'MAINTENANCE.txt').write_text(

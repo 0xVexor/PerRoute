@@ -36,11 +36,8 @@ public final class MacApplicationFamilies {
 
     public List<ExecutableRoute> bindings(List<AppGateway.Route> routes) throws IOException {
         // Read once so every family in this connection uses the same complete inventory.
-        MacApplicationCatalog.Snapshot snapshot = null;
-        if (routes.stream().anyMatch(route -> ApplicationIdentity.isMacFamily(route.applicationPath()))) {
-            snapshot = catalog.installed();
-            requireComplete(snapshot);
-        }
+        MacApplicationCatalog.Snapshot snapshot = catalog.installed();
+        requireComplete(snapshot);
         var result = new ArrayList<ExecutableRoute>();
         var owners = new HashMap<String, String>();
         for (var route : routes) {
@@ -51,7 +48,14 @@ public final class MacApplicationFamilies {
             for (String path : paths) {
                 if (owners.putIfAbsent(path, identity) != null)
                     throw new IOException("Application selections overlap. Select either an app including helpers or its individual executables.");
-                result.add(new ExecutableRoute(path, route.listenPort()));
+                // Catalog metadata requests the scope; the native helper and engine
+                // independently require the actual Apple Safari signing identity.
+                boolean safari = snapshot.applications().stream().anyMatch(app ->
+                        app.executablePath().toString().equals(path) && app.signatureValid() &&
+                        "com.apple.Safari".equals(app.bundleIdentifier()) && "com.apple.Safari".equals(app.signingIdentifier()));
+                result.add(new ExecutableRoute(path, route.listenPort(), safari
+                        ? app.perroute.platform.macos.routing.MacPerAppRoutingPlan.Scope.SAFARI_APPLICATION
+                        : app.perroute.platform.macos.routing.MacPerAppRoutingPlan.Scope.EXECUTABLE));
                 if (result.size() > 256) throw new IOException("The selection includes more than 256 executable paths. Select fewer apps or individual helpers.");
             }
         }

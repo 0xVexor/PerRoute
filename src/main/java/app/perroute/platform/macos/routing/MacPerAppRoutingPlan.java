@@ -7,8 +7,11 @@ import java.util.*;
 /** Offline candidate for the standalone TUN backend. Never installs or starts a process. */
 public final class MacPerAppRoutingPlan {
     public static final String ENGINE_VERSION = "1.14.3";
-    public record ExecutableRoute(String executablePath, int socksPort) {
+    public enum Scope { EXECUTABLE, SAFARI_APPLICATION }
+    public record ExecutableRoute(String executablePath, int socksPort, Scope scope) {
+        public ExecutableRoute(String executablePath, int socksPort) { this(executablePath, socksPort, Scope.EXECUTABLE); }
         public ExecutableRoute {
+            Objects.requireNonNull(scope);
             executablePath = executable(executablePath);
             if (socksPort < 1 || socksPort > 65535) throw new IllegalArgumentException("Invalid loopback SOCKS port");
         }
@@ -49,6 +52,12 @@ public final class MacPerAppRoutingPlan {
             var paths = bindings.entrySet().stream().filter(entry -> entry.getValue() == port).map(Map.Entry::getKey).toList();
             rules.add(Map.of("inbound", List.of("perroute-tun-spike"), "network", "tcp", "process_path", paths,
                     "action", "route", "outbound", tag));
+        }
+        for (var route : selected) {
+            if (route.scope() == Scope.SAFARI_APPLICATION)
+                rules.add(Map.of("inbound", List.of("perroute-tun-spike"), "network", "tcp",
+                        "safari_responsible_path", route.executablePath(), "action", "route",
+                        "outbound", "xray-loopback-" + route.socksPort()));
         }
         // A config check must never imply approval to capture the host's traffic. The future native
         // supervisor must own interface/route recovery before enabling any automatic host routes.

@@ -108,6 +108,10 @@ public final class MacConnectionBackend implements ConnectionBackend, StartupRec
         if (perApp == null) throw unavailable("Per-app gateway");
         for (var route : routes) restoreApplication(route.applicationPath());
         perApp.startGateway(routes);
+        long safari = perApp.safariBindingCount();
+        logs.forEach(listener -> listener.accept("[Safari] " + app.perroute.service.BuildIdentity.displayVersion() +
+                "; selected_routes=" + routes.size() + "; safari_bindings=" + safari +
+                "; IPv4 TCP only; diagnostics subsystem=app.perroute.safari"));
     }
     @Override public void setGatewayLimits(String path, long down, long up) {
         if (perApp == null) throw unavailable("Per-app limits");

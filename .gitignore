@@ -86,3 +86,6 @@ $RECYCLE.BIN/
 
 # Local Python build-tool caches
 __pycache__/
+
+# Persistent local preview signing state; keep across build clean operations.
+/.perroute-local-signing/

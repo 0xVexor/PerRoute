@@ -58,7 +58,7 @@ def bundle_paths(app, architecture, inspect=architectures):
     return app, xray
 
 
-def stage(app, architecture=None, *, provider=payload, inspect=architectures):
+def stage(app, architecture=None, *, provider=payload, inspect=architectures, safari_engine=None, safari_source=None):
     architecture = architecture or platform.machine()
     app, xray = bundle_paths(app, architecture, inspect)
     destination = app / 'Contents/Library/Engines'
@@ -68,6 +68,18 @@ def stage(app, architecture=None, *, provider=payload, inspect=architectures):
     if not gpl.startswith(b'                    GNU GENERAL PUBLIC LICENSE') or b'Version 3, 29 June 2007' not in gpl:
         raise ValueError('The GPL version 3 text is required in the routing bundle')
     with provider() as (engine, upstream_architecture, license_text):
+        source_manifest = None
+        if safari_engine is not None:
+            if safari_source is None:
+                raise ValueError('Safari engine requires its exact prepared source tree')
+            source_manifest = json.loads((safari_source / 'perroute-safari-source.json').read_text())
+            if source_manifest.get('upstreamRevision') != REVISION:
+                raise ValueError('Unexpected Safari engine source revision')
+            for name, expected in source_manifest['modifiedFilesSha256'].items():
+                path = safari_source / name
+                if not path.resolve().is_relative_to(safari_source.resolve()) or sha256(path.read_bytes()) != expected:
+                    raise ValueError('Safari engine source changed after preparation')
+            engine = Path(safari_engine)
         expected_architecture = {'arm64': 'arm64', 'x86_64': 'amd64'}[architecture]
         if upstream_architecture != expected_architecture or not macho(engine) or inspect(engine) != {architecture}:
             raise ValueError('The verified routing engine does not match the app architecture')
@@ -93,16 +105,29 @@ def stage(app, architecture=None, *, provider=payload, inspect=architectures):
                           'modifications': 'Local code signature only; separate executable, no upstream affiliation',
                           'acceptance': 'local-development-staging-only',
                           'releaseSourceComplianceVerified': False}
+            if source_manifest is not None:
+                provenance.update({'modifications':'PerRoute Safari IPv4 TCP attribution and local code signature',
+                    'safariProtocol':1, 'sourceBuild':source_manifest, 'sourceBuiltBinarySha256':sha256(copied.read_bytes())})
+                provenance.pop('upstreamBinarySha256', None)
+                # Deliver the full modified engine sources, including licenses and
+                # go.mod/go.sum, beside the installer. No binary-only patch claim.
+                source_archive = ROOT / 'build/macos-safari-engine/perroute-safari-engine-source.tar.gz'
+                source_archive.parent.mkdir(parents=True, exist_ok=True)
+                with tarfile.open(source_archive, 'w:gz') as archive:
+                    archive.add(safari_source, arcname='perroute-safari-engine')
+                provenance['modifiedSourceArchiveSha256'] = sha256(source_archive.read_bytes())
             (staged / 'sing-box.provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
             staged.rename(destination)
     return destination / 'sing-box', xray
 
 
-def sign_payloads(paths, settings, sign, verify):
+def sign_payloads(paths, settings, sign, verify, *, safari=False):
     # Explicit identifiers are part of the native trust policy. Seal these before
     # their enclosing app, rather than inheriting arbitrary upstream identifiers.
     for binary in paths:
         identifier = IDENTITIES[binary.name]
+        if safari and binary.name == 'sing-box':
+            identifier = 'app.perroute.tun-engine.safari-v1'
         sign(binary, settings, identifier)
         requirement = f'identifier "{identifier}" and certificate leaf = H"{settings["sha1"]}"'
         verify('/usr/bin/codesign', '--verify', '--strict', '-R', '=' + requirement, binary, quiet=True)

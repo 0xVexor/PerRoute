@@ -12,6 +12,23 @@ plugins {
 group = "app.perroute"
 version = "3.6.0"
 
+val sourceRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.map { it.trim() }
+val sourceBuildNumber = providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.map { it.trim() }
+val generatedBuildInfo = layout.buildDirectory.dir("generated/build-info")
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    inputs.property("revision", sourceRevision)
+    inputs.property("number", sourceBuildNumber)
+    inputs.property("version", project.version.toString())
+    outputs.dir(generatedBuildInfo)
+    doLast {
+        val directory = generatedBuildInfo.get().asFile.apply { mkdirs() }
+        directory.resolve("perroute-build.properties").writeText(
+            "version=${project.version}\nnumber=${sourceBuildNumber.get()}\nrevision=${sourceRevision.get()}\n")
+    }
+}
+sourceSets.main { resources.srcDir(generatedBuildInfo) }
+tasks.named("processResources") { dependsOn(generateBuildInfo) }
+
 val stageNativeResources = tasks.register<Sync>("stageNativeResources") {
     into(layout.buildDirectory.dir("native-resources"))
     from(layout.projectDirectory.dir("tools/xray")) { into("common/xray") }
@@ -872,6 +889,19 @@ tasks.register<Exec>("packageMacosPkg") {
     commandLine(providers.gradleProperty("pythonExecutable").getOrElse("python3"), "scripts/macos_pkg.py", "--app",
         layout.buildDirectory.dir("macos-routing-helper/PerRoute.app").get().asFile.absolutePath,
         "--output", layout.buildDirectory.dir("macos-pkg").get().asFile.absolutePath)
+    providers.gradleProperty("previousMacosHelperRecovery").orNull?.let {
+        args("--previous-helper-recovery", it)
+    }
+}
+
+tasks.register<Exec>("packageMacosSafariPkg") {
+    group = "distribution"
+    description = "Build the source-identified Safari preview PKG without tests or installation"
+    dependsOn(tasks.named("createDistributable"))
+    onlyIf { System.getProperty("os.name") == "Mac OS X" }
+    commandLine(providers.gradleProperty("pythonExecutable").getOrElse("python3"),
+        "scripts/build_macos_safari_pkg.py", "--app",
+        layout.buildDirectory.dir("compose/binaries/main/app/PerRoute.app").get().asFile.absolutePath)
     providers.gradleProperty("previousMacosHelperRecovery").orNull?.let {
         args("--previous-helper-recovery", it)
     }

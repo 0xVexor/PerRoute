@@ -212,7 +212,7 @@ private fun NewGeneral(shell: Shell) {
             Spacer(Modifier.width(16.dp))
             Column {
                 Text("PerRoute", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text(app.perroute.service.SecureUpdateService.CURRENT_VERSION, color = White.copy(.85f), fontSize = 14.sp)
+                Text(app.perroute.service.BuildIdentity.displayVersion(), color = White.copy(.85f), fontSize = 14.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(Slogan, color = White.copy(.85f), fontSize = 14.sp)
                 Text(Credit, color = Muted, fontSize = 12.sp)
@@ -340,7 +340,7 @@ private fun NewUpdates(shell: Shell) {
             Spacer(Modifier.width(18.dp))
             Column {
                 Text(model.version, color = White, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Installed: ${app.perroute.service.SecureUpdateService.CURRENT_VERSION}", color = Muted, fontSize = 14.sp)
+                Text("Installed: ${app.perroute.service.BuildIdentity.displayVersion()}", color = Muted, fontSize = 14.sp)
             }
         }
         Spacer(Modifier.height(16.dp))

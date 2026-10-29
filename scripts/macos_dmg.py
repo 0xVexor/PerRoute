@@ -86,9 +86,11 @@ def verify_signature(app):
         if not certificate.is_file():
             raise ValueError('A certificate-signed app is required; ad-hoc signing breaks helper authentication')
         pin = hashlib.sha1(certificate.read_bytes()).hexdigest()
+    provenance = json.loads((Path(app) / 'Contents/Library/Engines/sing-box.provenance.json').read_text())
+    engine_identity = 'app.perroute.tun-engine.safari-v1' if provenance.get('safariProtocol') == 1 else 'app.perroute.tun-engine'
     for name, identity in [('', 'app.perroute.spike'), ('Contents/MacOS/PerRouteHelperInstaller', 'app.perroute.proxy-installer'),
                            ('Contents/Library/HelperTools/PerRouteProxyHelper', 'app.perroute.proxy-helper'),
-                           ('Contents/Library/Engines/sing-box', 'app.perroute.tun-engine'),
+                           ('Contents/Library/Engines/sing-box', engine_identity),
                            (f'Contents/app/resources/xray/{ENGINES[platform.machine()]}/xray', 'app.perroute.xray')]:
         requirement = f'=identifier "{identity}" and certificate leaf = H"{pin}"'
         run('/usr/bin/codesign', '--verify', '--strict', '-R', requirement, Path(app) / name)

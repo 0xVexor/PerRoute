@@ -43,4 +43,6 @@ bool PRObserveSafariTCPConnection(pid_t socketPid, uid_t user,
     const char *selectedExecutable, const PRIPv4TCPConnection *connection,
     PRResponsibleApplication *result);
 
+void PRSafariDiagnostic(const char *stage, bool matched, pid_t socketPid, uid_t user);
+
 #endif

@@ -50,7 +50,7 @@ NSString *PRRequirement(NSString *identifier, NSString *team) {
     // Local builds pin the persistent signing certificate at compile time. No request may choose it.
     NSString *pin = @PR_LOCAL_CERT_SHA1;
     if (pin.length != 40 || [pin rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location != NSNotFound ||
-        ![team isEqual:@"local"] || (![identifier isEqual:PRAppIdentifier] && ![identifier isEqual:PRHelperLabel] && ![identifier isEqual:@"app.perroute.proxy-installer"] && ![identifier isEqual:PRTunEngineIdentifier] && ![identifier isEqual:PRXrayIdentifier])) return nil;
+        ![team isEqual:@"local"] || (![identifier isEqual:PRAppIdentifier] && ![identifier isEqual:PRHelperLabel] && ![identifier isEqual:@"app.perroute.proxy-installer"] && ![identifier isEqual:@"app.perroute.tun-engine.safari-v1"] && ![identifier isEqual:PRTunEngineIdentifier] && ![identifier isEqual:PRXrayIdentifier])) return nil;
     return [NSString stringWithFormat:@"identifier \"%@\" and certificate leaf = H\"%@\"", identifier, pin];
 #else
     // Never substitute ad-hoc identities or a caller-supplied requirement for this trust boundary.

@@ -4,11 +4,27 @@
 #include <dlfcn.h>
 #include <libproc.h>
 #include <stdlib.h>
+#include <os/log.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <sys/proc.h>
 #include <sys/proc_info.h>
 
 typedef pid_t (*ResponsibilityPid)(pid_t);
+static os_log_t SafariLog;
+static pthread_once_t SafariLogOnce = PTHREAD_ONCE_INIT;
+static atomic_uint_fast64_t SafariMatches, SafariMisses;
+static void CreateSafariLog(void) { SafariLog = os_log_create("app.perroute.safari", "attribution"); }
+void PRSafariDiagnostic(const char *stage, bool matched, pid_t socketPid, uid_t user) {
+    pthread_once(&SafariLogOnce, CreateSafariLog);
+    uint64_t count = atomic_fetch_add(matched ? &SafariMatches : &SafariMisses, 1) + 1;
+    if (count <= 20 || count % 100 == 0)
+        os_log_with_type(SafariLog, OS_LOG_TYPE_DEFAULT,
+            "stage=%{public}s matched=%{public}d pid=%{public}d uid=%{public}u matched_total=%{public}llu unmatched_total=%{public}llu",
+            stage, matched, socketPid, user, (unsigned long long)atomic_load(&SafariMatches),
+            (unsigned long long)atomic_load(&SafariMisses));
+}
 
 static bool SameProcess(const struct proc_bsdinfo *left, const struct proc_bsdinfo *right) {
     return left->pbi_pid == right->pbi_pid && left->pbi_uid == right->pbi_uid &&

@@ -35,6 +35,9 @@ func MatchSafariResponsibleConnection(selected string, metadata *adapter.Inbound
 	owner, err := newDarwinConnectionFinder(0).find("tcp",
 		netip.AddrPortFrom(source, metadata.Source.Port), netip.AddrPortFrom(destination, metadata.Destination.Port))
 	if err != nil || owner.ProcessID < 2 || owner.UserId != metadata.ProcessInfo.UserId {
+		stage := C.CString("fresh-owner-unavailable")
+		C.PRSafariDiagnostic(stage, false, 0, C.uid_t(metadata.ProcessInfo.UserId))
+		C.free(unsafe.Pointer(stage))
 		return false
 	}
 	path := C.CString(selected)
@@ -45,5 +48,9 @@ func MatchSafariResponsibleConnection(selected string, metadata *adapter.Inbound
 		sourcePort:         C.uint16_t(metadata.Source.Port), destinationPort: C.uint16_t(metadata.Destination.Port),
 	}
 	var result C.PRResponsibleApplication
-	return bool(C.PRObserveSafariTCPConnection(C.pid_t(owner.ProcessID), C.uid_t(owner.UserId), path, &connection, &result))
+	matched := C.PRObserveSafariTCPConnection(C.pid_t(owner.ProcessID), C.uid_t(owner.UserId), path, &connection, &result)
+	stage := C.CString("connection-responsibility-signature")
+	C.PRSafariDiagnostic(stage, matched, C.pid_t(owner.ProcessID), C.uid_t(owner.UserId))
+	C.free(unsafe.Pointer(stage))
+	return bool(matched)
 }

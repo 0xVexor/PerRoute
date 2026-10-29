@@ -112,7 +112,7 @@ private fun SimpleSidebar(shell: Shell, chrome: WindowChrome, modifier: Modifier
                 Text("PerRoute", color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                 if (showVersion) {
                     Spacer(Modifier.width(12.dp))
-                    Text(app.perroute.service.SecureUpdateService.CURRENT_VERSION, color = Muted, fontSize = 12.5.sp)
+                    Text(app.perroute.service.BuildIdentity.displayVersion(), color = Muted, fontSize = 12.5.sp)
                 }
             }
         }

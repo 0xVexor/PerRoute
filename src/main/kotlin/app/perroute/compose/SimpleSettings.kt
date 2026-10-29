@@ -146,7 +146,7 @@ private fun SimpleGeneral(shell: Shell) {
             BrandMark(64.dp)
             Spacer(Modifier.width(20.dp))
             Column {
-                Text("PerRoute ${app.perroute.service.SecureUpdateService.CURRENT_VERSION}", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("PerRoute ${app.perroute.service.BuildIdentity.displayVersion()}", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(Slogan, color = White.copy(.8f), fontSize = 15.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(Credit, color = Muted, fontSize = 13.sp)
@@ -269,7 +269,7 @@ private fun SimpleUpdates(shell: Shell) {
     }
     val model = settingsModel(shell, SettingsCategory.Updates) { UpdateSettingsModel(shell) }
     UpdateEffects(model)
-    SimpleSettingRow(model.headline, "Installed: ${app.perroute.service.SecureUpdateService.CURRENT_VERSION}" + (model.available?.let { "  ·  Available: $it" } ?: "")) {
+    SimpleSettingRow(model.headline, "Installed: ${app.perroute.service.BuildIdentity.displayVersion()}" + (model.available?.let { "  ·  Available: $it" } ?: "")) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SecondaryButton(if (shell.busy) "Checking…" else "Check for updates", icon = Icons.Rounded.Refresh, enabled = !shell.busy) { model.check() }
             when {

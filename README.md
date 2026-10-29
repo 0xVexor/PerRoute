@@ -113,7 +113,7 @@ Requires macOS 13 or newer. Apple Silicon is tested; Intel builds are untested. 
 | Smart per-app | Routes selected apps, including Chrome helpers, over IPv4 TCP. Unselected apps keep their direct connection. |
 | Local proxy | Provides local SOCKS5 and HTTP proxies for apps you configure manually. |
 
-Per-app limitations: Safari routing is unreliable; UDP/QUIC, IPv6 and a kill switch are unsupported. DNS leak protection and ECH support are not guaranteed. Windows-only tools are hidden or disabled. The browser extension is separate and is not bundled in the DMG.
+Per-app limitations: the separate Safari test build includes responsible-process attribution for IPv4 TCP, pending installed isolation acceptance; UDP/QUIC, IPv6 and a kill switch are unsupported. DNS leak protection and ECH support are not guaranteed. Windows-only tools are hidden or disabled. The browser extension is separate and is not bundled in the DMG.
 
 ### Install on macOS
 
@@ -443,6 +443,26 @@ The PKG, checksums, installation instructions and build metadata are in `build/m
 For an explicit certificate migration, pass the original signed retirement payload directory as `-PpreviousMacosHelperRecovery=/absolute/path/to/recovery` when building the PKG. It must contain `Contents/MacOS/PerRouteHelperInstaller` and `Contents/Library/HelperTools/PerRouteProxyHelper` signed by the original certificate. The package validates and embeds only these two binaries. This option does not recreate a missing signing key or permit an arbitrary helper identity.
 
 The optional drag-to-Applications DMG is still built with `sh gradlew --no-daemon packageMacosDmg` into `build/macos-installer/`. See the generated `MAINTENANCE.txt` for signing and upgrade details. Reuse the local signing identity for compatible helper upgrades; keep its private key private. Builds refuse to generate a new identity while installed software exists and signing state is missing. Both formats still require downloaded-install and first-launch testing on another Mac.
+
+### Build the Safari test installer
+
+Use a full Git checkout with all source changes committed and Go installed:
+
+```sh
+sh gradlew --no-daemon packageMacosSafariPkg
+```
+
+This builds the modified source-pinned engine and matching app/helper PKG without running test suites or installing anything. The output in `build/macos-safari-pkg/` includes the PKG, complete modified engine sources, checksums, testing instructions and `Collect Safari Logs.command`. After reproducing an issue, run that command to copy bounded attribution diagnostics, then copy **Settings > Activity log > Copy all** as well. Native attribution logs exclude destinations, URLs and credentials.
+
+The app shows `3.6.0 (build N, REVISION)`. `N` is the number of commits reachable from the source commit in full Git history; the revision distinguishes branches with the same count. The same revision produces the same build identifier. Finder's `CFBundleVersion`, the package filename and `BUILD.json` carry that identity too. This identifies source builds; it does not claim byte-identical installers.
+
+Local signing state lives in the ignored `.perroute-local-signing/` directory and must be retained across builds. If the original signing state is missing, an explicit known-certificate migration requires the old certificate's signed installer and helper:
+
+```sh
+sh gradlew --no-daemon packageMacosSafariPkg -PpreviousMacosHelperRecovery=/absolute/path/to/original-signed-recovery
+```
+
+The recovery folder contains `Contents/MacOS/PerRouteHelperInstaller` and `Contents/Library/HelperTools/PerRouteProxyHelper`. Building does not retire the installed helper. The resulting PKG handles only the explicitly included certificate migration during installation and refuses unknown identities or pending network recovery.
 
 ### Build on Windows
 
