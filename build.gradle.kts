@@ -651,6 +651,21 @@ fun tunFixtureSignature(taskName: String, binary: String, identity: String, depe
     commandLine("/usr/bin/codesign", "--force", "--sign", "-", "--identifier", identity,
         layout.buildDirectory.file("macos-tun/$binary").get().asFile.absolutePath)
 }
+val responsibleApplicationTests = tunTestBinary("compileMacosResponsibleApplicationTests", "responsible-application-tests",
+    listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationTests.c"), false)
+val responsibleApplicationProbe = tunTestBinary("compileMacosResponsibleApplicationProbe", "responsible-application-probe",
+    listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationDarwin.c",
+        "native/macos-tun/ResponsibleApplicationProbe.c"), false)
+listOf(responsibleApplicationTests, responsibleApplicationProbe).forEach { task ->
+    task.configure {
+        inputs.files("native/macos-tun/ResponsibleApplication.h", "native/macos-tun/ResponsibleApplicationInternal.h")
+    }
+}
+tasks.register<Exec>("runMacosResponsibleApplicationTests") {
+    dependsOn(responsibleApplicationTests)
+    onlyIf { System.getProperty("os.name") == "Mac OS X" }
+    commandLine(layout.buildDirectory.file("macos-tun/responsible-application-tests").get().asFile.absolutePath)
+}
 val tunSessionSources = listOf("native/macos-tun/TunStore.m", "native/macos-tun/TunSession.m", "native/macos-tun/EngineWorker.c")
 val storeFixture = tunTestBinary("compileMacosTunStoreFixture", "store-fixture", listOf("native/macos-tun/StoreFixture.c"), false)
 val signStoreFixture = tunFixtureSignature("signMacosTunStoreFixture", "store-fixture", "app.perroute.store-fixture", storeFixture)
