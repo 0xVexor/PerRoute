@@ -656,7 +656,13 @@ val responsibleApplicationTests = tunTestBinary("compileMacosResponsibleApplicat
 val responsibleApplicationProbe = tunTestBinary("compileMacosResponsibleApplicationProbe", "responsible-application-probe",
     listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationDarwin.c",
         "native/macos-tun/ResponsibleApplicationProbe.c"), false)
-listOf(responsibleApplicationTests, responsibleApplicationProbe).forEach { task ->
+val responsibleConnectionDarwinTests = tunTestBinary("compileMacosResponsibleConnectionDarwinTests", "responsible-connection-darwin-tests",
+    listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationDarwin.c",
+        "native/macos-tun/ResponsibleConnectionDarwinTests.c"), false)
+listOf(responsibleApplicationProbe, responsibleConnectionDarwinTests).forEach { task ->
+    task.configure { args("-framework", "Security", "-framework", "CoreFoundation") }
+}
+listOf(responsibleApplicationTests, responsibleApplicationProbe, responsibleConnectionDarwinTests).forEach { task ->
     task.configure {
         inputs.files("native/macos-tun/ResponsibleApplication.h", "native/macos-tun/ResponsibleApplicationInternal.h")
     }
@@ -665,6 +671,11 @@ tasks.register<Exec>("runMacosResponsibleApplicationTests") {
     dependsOn(responsibleApplicationTests)
     onlyIf { System.getProperty("os.name") == "Mac OS X" }
     commandLine(layout.buildDirectory.file("macos-tun/responsible-application-tests").get().asFile.absolutePath)
+}
+tasks.register<Exec>("runMacosResponsibleConnectionDarwinTests") {
+    dependsOn(responsibleConnectionDarwinTests)
+    onlyIf { System.getProperty("os.name") == "Mac OS X" }
+    commandLine(layout.buildDirectory.file("macos-tun/responsible-connection-darwin-tests").get().asFile.absolutePath)
 }
 val tunSessionSources = listOf("native/macos-tun/TunStore.m", "native/macos-tun/TunSession.m", "native/macos-tun/EngineWorker.c")
 val storeFixture = tunTestBinary("compileMacosTunStoreFixture", "store-fixture", listOf("native/macos-tun/StoreFixture.c"), false)

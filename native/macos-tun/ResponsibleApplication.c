@@ -41,3 +41,28 @@ bool PRObserveResponsibleApplicationWithReaders(pid_t socketPid, uid_t user,
     result->application = appAfter;
     return true;
 }
+
+bool PRObserveResponsibleConnectionWithReaders(pid_t socketPid, uid_t user,
+    const char *selectedExecutable, const PRIPv4TCPConnection *connection,
+    PRResponsibleApplication *result, void *context,
+    PRReadProcessIdentity readIdentity, PRReadResponsiblePid readResponsible,
+    PRReadTCPConnection readConnection, PRVerifyApplication verifyApplication) {
+    if (!result) return false;
+    memset(result, 0, sizeof(*result));
+    if (!connection || !connection->sourceAddress || !connection->destinationAddress ||
+        !connection->sourcePort || !connection->destinationPort || !readConnection || !verifyApplication) return false;
+    PRResponsibleApplication before = {0}, after = {0};
+    uint64_t firstGeneration = 0, lastGeneration = 0;
+    if (!PRObserveResponsibleApplicationWithReaders(socketPid, user, selectedExecutable, &before,
+            context, readIdentity, readResponsible) ||
+        !readConnection(context, socketPid, connection, &firstGeneration) || !firstGeneration ||
+        !verifyApplication(context, before.application.pid) ||
+        !PRObserveResponsibleApplicationWithReaders(socketPid, user, selectedExecutable, &after,
+            context, readIdentity, readResponsible) ||
+        !SameIdentity(&before.socketProcess, &after.socketProcess) ||
+        !SameIdentity(&before.application, &after.application) ||
+        !readConnection(context, socketPid, connection, &lastGeneration) ||
+        firstGeneration != lastGeneration || !verifyApplication(context, after.application.pid)) return false;
+    *result = after;
+    return true;
+}
