@@ -61,6 +61,15 @@ public final class MacosApplicationCatalogTests {
                 var group = groups.stream().filter(value -> value.application().equals(chrome.get())).findFirst().orElseThrow();
                 check(group.members().size() > 1, "Installed Chrome exposes verified background helpers for logical grouping");
                 check(group.members().stream().skip(1).allMatch(value -> value.backgroundHelper()), "Live grouped helpers declare a background role");
+                var chromeHelpers = installed.applications().stream().filter(value ->
+                        value.bundlePath().startsWith(chrome.get().bundlePath().resolve("Contents")) &&
+                        value.signatureValid() && value.teamIdentifier().equals(chrome.get().teamIdentifier()) &&
+                        value.bundlePath().getFileName().toString().startsWith("Google Chrome Helper")).toList();
+                check(!chromeHelpers.isEmpty(), "Real native coverage includes Chromium helpers rather than just its updater");
+                check(chromeHelpers.stream().allMatch(value -> value.backgroundHelper() && group.members().contains(value)),
+                        "Every verified Chromium helper, including legacy string flags, joins the main group");
+                check(groups.stream().filter(value -> value.application().bundlePath().startsWith(chrome.get().bundlePath())).count()==1,
+                        "The real installed Chrome inventory yields exactly one picker entry, with no nested helper rows");
             }
             var safariAlias = java.nio.file.Path.of("/Applications/Safari.app");
             if (java.nio.file.Files.exists(safariAlias)) {
