@@ -107,6 +107,10 @@ internal fun routeCellText(shell: Shell, path: String): RouteCellText {
 
 internal class AppsModel(private val shell: Shell) {
     var query by mutableStateOf("")
+    var showExecutables by mutableStateOf(false)
+    var groups by mutableStateOf<List<app.perroute.backend.api.ApplicationGroup>>(emptyList())
+    var installedError by mutableStateOf("")
+    var runningError by mutableStateOf("")
     var source by mutableStateOf(AppListSource.INSTALLED)
     var runningLoading by mutableStateOf(true)
     var installedLoading by mutableStateOf(true)
@@ -124,13 +128,22 @@ internal class AppsModel(private val shell: Shell) {
             runningLoading = true
             installedLoading = true
             val runningTask = async(Dispatchers.IO) {
-                runCatching { shell.controller.runningApplications(force).map { AppChoice(it.name(), it.path()) } }.getOrDefault(emptyList())
+                runCatching { shell.controller.runningApplications(force).map { AppChoice(it.name(), it.path()) } }
             }
             val installedTask = async(Dispatchers.IO) {
-                runCatching { shell.controller.installedApplications(force).map { AppChoice(it.name(), it.path()) } }.getOrDefault(emptyList())
+                runCatching {
+                    val inventory = if (shell.controller.applicationGroupingSupported()) shell.controller.applicationGroups() else emptyList()
+                    val apps = if (shell.controller.applicationGroupingSupported()) inventory.map { it.application() }
+                        else shell.controller.installedApplications(force)
+                    apps.map { AppChoice(it.name(), it.path()) } to inventory
+                }
             }
-            try { running = runningTask.await() } finally { runningLoading = false }
-            try { installed = installedTask.await() } finally { installedLoading = false }
+            runningTask.await().onSuccess { running = it; runningError = "" }
+                .onFailure { running = emptyList(); runningError = it.message ?: "Running application discovery failed." }
+            runningLoading = false
+            installedTask.await().onSuccess { (apps, inventory) -> installed = apps; groups = inventory; installedError = "" }
+                .onFailure { installed = emptyList(); groups = emptyList(); installedError = it.message ?: "Installed application discovery failed." }
+            installedLoading = false
         }
     }
 
@@ -143,7 +156,13 @@ internal class AppsModel(private val shell: Shell) {
             app.perroute.service.StoreAppPaths.current(saved).takeIf { !it.equals(saved, true) }?.let { it.lowercase() to saved }
         }.toMap()
         val available = if (moved.isEmpty()) discovered else discovered.map { choice -> moved[choice.path.lowercase()]?.let { AppChoice(choice.name, it) } ?: choice }
-        val extra = manual.filter { path -> available.none { ApplicationIdentity.same(it.path, path) } }.map { AppChoice(fileName(it), it) }
+        val groupedIdentities = groups.flatMap { group ->
+            group.executables() + ApplicationIdentity.macAppFamily(ApplicationIdentity.path(group.application().path()))
+        }.toSet()
+        val extra = manual.filter { path -> available.none { ApplicationIdentity.same(it.path, path) } &&
+            (showExecutables || path !in groupedIdentities) }.map {
+                AppChoice(fileName(it) + if (ApplicationIdentity.isMac(it)) " (executable selection)" else "", it)
+            }
         val key = available to shell.apps.toList()
         if (pinnedFor != key) { pinnedFor = key; pinned = shell.apps.mapTo(hashSetOf()) { ApplicationIdentity.comparisonKey(it) } }
         return (extra + available).filter { query.isBlank() || it.name.contains(query, true) || it.path.contains(query, true) }
@@ -175,6 +194,8 @@ internal class AppsModel(private val shell: Shell) {
 
     fun focus(path: String) { shell.draft.focused = path }
 
+    fun reviewGrouping() { showApplicationMigration(shell, this) }
+
     fun browseExe() {
         val owner = shell.hostWindow ?: return
         val dialog = FileDialog(owner, "Choose application", FileDialog.LOAD).apply {
@@ -189,6 +210,7 @@ internal class AppsModel(private val shell: Shell) {
             shell.notify(ActionResult(false,it.message ?: "Select an executable from the application list.")); return
         }
         if (!shell.draft.isSelected(path)) shell.draft.selected += path
+        if (ApplicationIdentity.isMac(path)) showExecutables = true
         shell.draft.focused = path
     }
 }

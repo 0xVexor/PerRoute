@@ -39,13 +39,18 @@ static NSDictionary *Application(NSURL *url) {
     if (info) CFRelease(info);
     if (code) CFRelease(code);
     // Paths identify catalog entries only. Signing metadata is observational, not routing authority.
+    id uiElement = [bundle objectForInfoDictionaryKey:@"LSUIElement"];
+    id backgroundOnly = [bundle objectForInfoDictionaryKey:@"LSBackgroundOnly"];
+    BOOL helper = ([uiElement isKindOfClass:NSNumber.class] && [uiElement boolValue]) ||
+        ([backgroundOnly isKindOfClass:NSNumber.class] && [backgroundOnly boolValue]);
     return @{@"name": name, @"bundlePath": url.path,
         @"executablePath": executable.path, @"bundleIdentifier": identifier,
-        @"teamIdentifier": team, @"signingIdentifier": signingIdentifier, @"signatureValid": @(valid)};
+        @"teamIdentifier": team, @"signingIdentifier": signingIdentifier, @"signatureValid": @(valid), @"backgroundHelper": @(helper)};
 }
 
 // A browser's network owner may be a nested helper rather than its main executable.
-// Discover candidates only; each returned exact path still requires explicit selection.
+// Discovery is observational. Grouping additionally checks background role and signing metadata;
+// routing still revalidates the exact executable paths at Connect.
 static void AddApplicationFamilyLimited(NSURL *url, NSMutableDictionary *entries, NSMutableArray *warnings, NSUInteger limit) {
     NSDictionary *main = Application(url);
     if (!main) return;

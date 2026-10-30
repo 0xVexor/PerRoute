@@ -81,8 +81,16 @@ private class MemoryPreferences : AbstractPreferences(null, "") {
     override fun flushSpi() {}
 }
 
-private class DemoBackend(private val perAppDriver: Boolean = true) : ConnectionBackend {
-    override fun capabilities() = app.perroute.backend.api.BackendCapabilities.windows()
+private const val MAC_MAIN = "macos-executable:/Applications/Fixture Browser.app/Contents/MacOS/Browser"
+private const val MAC_FAMILY = "macos-app-family:/Applications/Fixture Browser.app/Contents/MacOS/Browser"
+private const val MAC_HELPER = "macos-executable:/Applications/Fixture Browser.app/Contents/Helpers/Network.app/Contents/MacOS/Network"
+
+private class DemoBackend(private val perAppDriver: Boolean = true, private val grouping: Boolean = false) : ConnectionBackend {
+    override fun capabilities() = if (grouping) app.perroute.backend.api.BackendCapabilities.macosPerApp() else app.perroute.backend.api.BackendCapabilities.windows()
+    override fun supportsApplicationGrouping() = grouping
+    override fun applicationGroups() = if (grouping) listOf(app.perroute.backend.api.ApplicationGroup(
+        app.perroute.backend.api.ApplicationDescriptor("Fixture Browser", MAC_FAMILY), listOf(MAC_MAIN, MAC_HELPER))) else emptyList()
+
     override fun installCore(progress: Consumer<String>) { error("Fixture") }
     override fun installPerApp(progress: Consumer<String>) { error("Fixture") }
     override fun checkForUpdate(feed: String): app.perroute.backend.api.UpdateDescriptor = error("Fixture")
@@ -140,7 +148,7 @@ private class DemoBackend(private val perAppDriver: Boolean = true) : Connection
     }
     override fun systemDnsServers() = listOf("192.0.2.53", "192.0.2.54")
     override fun publicResolver(): String? = "192.0.2.80"
-    override fun installedApplications() = listOf(
+    override fun installedApplications() = if (grouping) applicationGroups().map { it.application() } else listOf(
         app.perroute.backend.api.ApplicationDescriptor("Google Chrome", CHROME),
         app.perroute.backend.api.ApplicationDescriptor("Telegram", TELEGRAM),
         app.perroute.backend.api.ApplicationDescriptor("Discord", DISCORD),
@@ -162,7 +170,7 @@ private class DemoBackend(private val perAppDriver: Boolean = true) : Connection
             override fun close() {}
         }
     }
-    override fun runningApplications() = listOf(
+    override fun runningApplications() = if (grouping) installedApplications() else listOf(
         app.perroute.backend.api.ApplicationDescriptor("chrome.exe", CHROME), app.perroute.backend.api.ApplicationDescriptor("Telegram.exe", TELEGRAM))
     override fun localNetworks(resolveNames: Boolean) = listOf(app.perroute.localnet.LocalNetwork("home-net", "Wi-Fi", "192.168.1.20", "192.168.1.0/24", 24,
         "192.168.1.1", "aa-bb-cc-dd-ee-ff", listOf("192.168.1.1"), listOf(
@@ -186,7 +194,8 @@ private class Demo(
     val dark: Boolean = true,
     val auto: Boolean = false,
     val gateway: Boolean = true,
-    val style: UiStyle = UiStyle.NEW
+    val style: UiStyle = UiStyle.NEW,
+    val grouping: Boolean = false
 )
 
 private fun seedQuality(controller: PerRouteController) {
@@ -271,6 +280,14 @@ private fun demoState(demo: Demo): AppState {
     state.profiles().add(ConnectionProfile("p2", "Office", state.appPaths(), "de-1", ConnectionMode.NATIVE_PER_APP, rules, true, HashMap(state.appRoutes())))
     state.profiles().add(ConnectionProfile("p3", "Travel", emptyList(), "nl-1", ConnectionMode.SYSTEM_PROXY, emptyList(), false, emptyMap()))
     state.setActiveProfileId(if (demo.advanced) "p2" else "p1")
+    if (demo.grouping) {
+        state.appPaths().clear(); state.appPaths().addAll(listOf(MAC_MAIN, MAC_FAMILY))
+        state.appRoutes().clear(); state.appRoutes().putAll(mapOf(MAC_MAIN to "de-2", MAC_FAMILY to "nl-1"))
+        state.autoApps().clear(); state.autoPools().clear(); state.profiles().clear(); state.routeRules().clear()
+        state.bandwidthPolicies().clear()
+        state.bandwidthPolicies()[MAC_MAIN] = app.perroute.model.BandwidthPolicy(2_000_000, 1_000_000)
+        state.bandwidthPolicies()[MAC_FAMILY] = app.perroute.model.BandwidthPolicy(4_000_000, 0)
+    }
     return state
 }
 
@@ -311,7 +328,7 @@ private fun render(scene: Scene, output: Path) {
         putBoolean("v3.qualityBackground", true)
         put("ui.style", scene.demo.style.key)
     }
-    val backend = DemoBackend()
+    val backend = DemoBackend(grouping = scene.demo.grouping)
     val controller = PerRouteController(demoState(scene.demo), AppStateStore(data.resolve("state.bin")), backend, preferences)
     if (!scene.demo.empty) seedQuality(controller)
     Appearance.style = scene.demo.style
@@ -402,6 +419,11 @@ fun main(args: Array<String>) {
         val advanced = d(advanced = true, auto = true)
         val advancedOn = d(advanced = true, connected = true, auto = true)
         return listOf(
+            Scene("$p-macos-apps", Demo(advanced = true, style = style, grouping = true), tab = Tab.Apps, settleMillis = 1800),
+            Scene("$p-macos-migration", Demo(advanced = true, style = style, grouping = true), tab = Tab.Apps, settleMillis = 1800, prepare = { shell ->
+                val preview = shell.controller.previewApplicationMigration()
+                shell.showDialog { app.perroute.compose.ApplicationMigrationDialog(shell, app.perroute.compose.appsModel(shell), preview) }
+            }),
             Scene("$p-01-connection-connected", advancedOn, settleMillis = 1_800),
             Scene("$p-02-connection-disconnected", advanced),
             Scene("$p-03-connection-empty", d(empty = true)),

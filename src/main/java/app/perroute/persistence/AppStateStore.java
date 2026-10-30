@@ -138,6 +138,21 @@ public final class AppStateStore {
             catch (RuntimeException ignored) {}
         }
         state.setActiveProfileId(properties.getProperty("profile.active", ""));
+        int aliasCount = integer(properties, "application.alias.count");
+        if (aliasCount < 0 || aliasCount > 16384) throw new IllegalArgumentException("Too many application history aliases");
+        for (int i = 0; i < aliasCount; i++) {
+            String source = properties.getProperty("application.alias." + i + ".source", "");
+            String target = properties.getProperty("application.alias." + i + ".target", "");
+            if (app.perroute.model.ApplicationIdentity.isMac(source) && app.perroute.model.ApplicationIdentity.isMac(target)) {
+                try {
+                    app.perroute.model.ApplicationIdentity.path(source); app.perroute.model.ApplicationIdentity.path(target);
+                    if (!source.equals(target)) state.applicationHistoryAliases().put(source, target);
+                } catch (IllegalArgumentException ignored) { }
+            }
+        }
+        try { state.applicationHistoryAliases().keySet().forEach(key ->
+                app.perroute.model.ApplicationSetupMigration.historyIdentity(key, state.applicationHistoryAliases())); }
+        catch (IllegalArgumentException invalid) { throw new IllegalArgumentException("Invalid application history aliases", invalid); }
         state.setAdvancedRouting(Boolean.parseBoolean(properties.getProperty("advanced.enabled", "false")));
         int routeCount = integer(properties, "route.count");
         for (int i = 0; i < routeCount; i++) {
@@ -157,6 +172,13 @@ public final class AppStateStore {
             state.autoApps().add(app);
             String pool = properties.getProperty("auto." + i + ".pool", "");
             if (!pool.isBlank()) state.autoPools().put(app, AutoCandidatePool.decode(pool).encode());
+        }
+        int poolCount = integer(properties, "autopool.count");
+        if (poolCount < 0 || poolCount > 16384) throw new IllegalArgumentException("Too many saved Auto pools");
+        for (int i = 0; i < poolCount; i++) {
+            String identity = AppRoutes.normalize(properties.getProperty("autopool." + i + ".app", ""));
+            String value = properties.getProperty("autopool." + i + ".value", "");
+            if (!identity.isBlank() && !value.isBlank()) state.autoPools().put(identity, AutoCandidatePool.decode(value).encode());
         }
         int selectionCount = integer(properties, "autosel.count");
         for (int i = 0; i < selectionCount; i++) {
@@ -251,6 +273,22 @@ public final class AppStateStore {
             properties.setProperty("bandwidth." + limitIndex + ".app", entry.getKey());
             properties.setProperty("bandwidth." + limitIndex + ".limit", entry.getValue().encode());
             limitIndex++;
+        }
+
+        if (state.applicationHistoryAliases().size() > 16384) throw new IllegalArgumentException("Too many application history aliases");
+        properties.setProperty("autopool.count", String.valueOf(state.autoPools().size()));
+        int poolIndex = 0;
+        for (var pool : state.autoPools().entrySet()) {
+            properties.setProperty("autopool." + poolIndex + ".app", pool.getKey());
+            properties.setProperty("autopool." + poolIndex + ".value", pool.getValue());
+            poolIndex++;
+        }
+        properties.setProperty("application.alias.count", String.valueOf(state.applicationHistoryAliases().size()));
+        int aliasIndex = 0;
+        for (var alias : state.applicationHistoryAliases().entrySet()) {
+            properties.setProperty("application.alias." + aliasIndex + ".source", alias.getKey());
+            properties.setProperty("application.alias." + aliasIndex + ".target", alias.getValue());
+            aliasIndex++;
         }
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
