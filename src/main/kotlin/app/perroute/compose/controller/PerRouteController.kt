@@ -2524,6 +2524,11 @@ class PerRouteController @JvmOverloads constructor(
         editLock("application grouping")?.let { return it }
         if (!applicationGroupingSupported()) return ActionResult(false, "Application grouping is unavailable on this platform.")
         return try {
+            val changedIdentities = preview.plan.entries().filter { it.key().scope() == "current" &&
+                choices[it.key()] != ApplicationSetupMigration.KEEP_EXACT
+            }.flatMap { entry -> entry.variants().map { it.identity() }.filter { it != entry.key().target() } }.toSet()
+            if (temporaryRoutes().any { it.application in changedIdentities })
+                return ActionResult(false, "Cancel temporary server overrides for these executable selections, wait for them to expire, or keep their exact selections before combining apps.")
             val groups = backend.applicationGroups()
             if (groups != preview.plan.groups()) return ActionResult(false, "Application discovery changed. Review a fresh grouping preview.")
             synchronized(state) {
