@@ -2,6 +2,7 @@ package app.perroute;
 
 import app.perroute.model.ApplicationIdentity;
 import java.nio.file.Path;
+import java.io.IOException;
 import java.util.Locale;
 
 /** Real host files use host identities; Windows literals remain in explicit Windows contract tests. */
@@ -17,8 +18,8 @@ final class RegressionFixtures {
                 "/Applications/RegressionFixtures/" + windowsPath.substring(windowsPath.lastIndexOf('\\') + 1));
     }
 
-    static String identity(Path file) {
-        String path = file.toAbsolutePath().normalize().toString();
+    static String identity(Path file) throws IOException {
+        String path = file.toRealPath().toString();
         return windows() ? path : ApplicationIdentity.macExecutable(path);
     }
 }

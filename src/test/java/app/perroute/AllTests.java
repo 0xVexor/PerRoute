@@ -127,7 +127,7 @@ public final class AllTests {
                 equal(app.perroute.model.AppRoutes.normalize("C:\\Apps\\Chrome.exe"),
                         app.perroute.model.AppRoutes.normalize("c:/apps/CHROME.exe"));
             } else {
-                equal("macos-executable:" + file.toAbsolutePath().normalize(), identity);
+                equal("macos-executable:" + file.toRealPath(), identity);
                 equal(identity, key);
                 String otherCase = identity.replace("MixedCase.exe", "mixedcase.exe");
                 check(!key.equals(app.perroute.model.AppRoutes.normalize(otherCase)), "Tagged identities retain executable case");

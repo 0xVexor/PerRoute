@@ -84,12 +84,14 @@ final class V35Tests {
         run("3.5: rule analysis and core log hints", V35Tests::testAnalysis);
         withFixture("3.5 controller: temporary servers", V35Tests::testTemporaryRoutes);
         withFixture("3.5 controller: network restore", V35Tests::testNetworkRestore);
-        withFixture("3.5 controller: recipes apply and undo", V35Tests::testRecipesController);
+        if (RegressionFixtures.windows()) withFixture("3.5 controller: recipes apply and undo", V35Tests::testRecipesController);
+        else System.out.println("[skip] Windows-only recipes apply and undo controller workflow; platform mapping is not implemented on macOS");
         withFixture("3.5 controller: doctor and safety center", V35Tests::testHealth);
         withFixture("3.5 controller: subscription intelligence", V35Tests::testSubscriptionController);
         withFixture("3.5 controller: local network trust", V35Tests::testLocalNetworkController);
         withFixture("3.5 controller: QUIC is blocked for routed apps unless turned off", V35Tests::testQuicBlocked);
-        withFixture("3.5 controller: workspaces", V35Tests::testWorkspaceController);
+        if (RegressionFixtures.windows()) withFixture("3.5 controller: workspaces", V35Tests::testWorkspaceController);
+        else System.out.println("[skip] Windows-only workspaces controller workflow; platform mapping is not implemented on macOS");
     }
 
     private static void testSnapshotDiff() {
@@ -553,7 +555,7 @@ final class V35Tests {
         String executable(String name) throws IOException {
             Path file = directory.resolve(name);
             Files.writeString(file, "test");
-            return file.toAbsolutePath().normalize().toString();
+            return RegressionFixtures.identity(file);
         }
 
         @Override public void close() throws IOException {

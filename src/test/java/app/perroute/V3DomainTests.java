@@ -944,7 +944,7 @@ final class V3DomainTests {
         try {
             AppStateStore store = new AppStateStore(directory.resolve("state.bin"));
             String application = RegressionFixtures.windows() ? "C:\\Apps\\A.exe"
-                    : RegressionFixtures.identity(directory.resolve("A"));
+                    : RegressionFixtures.identity(Files.writeString(directory.resolve("A"), "fixture"));
             Properties v2 = new Properties();
             v2.setProperty("node.count", "0");
             v2.setProperty("app.count", "1");

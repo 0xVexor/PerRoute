@@ -6,6 +6,10 @@ on:
     branches: [test/portable-regression-fixtures]
   workflow_dispatch:
 
+concurrency:
+  group: portable-regressions-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
