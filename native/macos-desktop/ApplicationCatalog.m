@@ -11,6 +11,15 @@ static NSURL *CanonicalURL(NSURL *url) {
     return [NSURL fileURLWithPath:path];
 }
 
+static BOOL DeclaredBoolean(id value) {
+    if ([value isKindOfClass:NSNumber.class]) return [value boolValue];
+    if (![value isKindOfClass:NSString.class]) return NO;
+    // Chromium ships LSUIElement as the legacy string "1". Accept explicit
+    // boolean spellings only; arbitrary nonempty strings must not imply helper role.
+    NSString *flag = [value lowercaseString];
+    return [flag isEqualToString:@"1"] || [flag isEqualToString:@"true"] || [flag isEqualToString:@"yes"];
+}
+
 static NSDictionary *Application(NSURL *url) {
     url = CanonicalURL(url);
     if (!url) return nil;
@@ -41,8 +50,7 @@ static NSDictionary *Application(NSURL *url) {
     // Paths identify catalog entries only. Signing metadata is observational, not routing authority.
     id uiElement = [bundle objectForInfoDictionaryKey:@"LSUIElement"];
     id backgroundOnly = [bundle objectForInfoDictionaryKey:@"LSBackgroundOnly"];
-    BOOL helper = ([uiElement isKindOfClass:NSNumber.class] && [uiElement boolValue]) ||
-        ([backgroundOnly isKindOfClass:NSNumber.class] && [backgroundOnly boolValue]);
+    BOOL helper = DeclaredBoolean(uiElement) || DeclaredBoolean(backgroundOnly);
     return @{@"name": name, @"bundlePath": url.path,
         @"executablePath": executable.path, @"bundleIdentifier": identifier,
         @"teamIdentifier": team, @"signingIdentifier": signingIdentifier, @"signatureValid": @(valid), @"backgroundHelper": @(helper)};

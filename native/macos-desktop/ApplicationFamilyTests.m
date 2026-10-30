@@ -25,9 +25,22 @@ int main(void) {
         [NSFileManager.defaultManager createDirectoryAtPath:temporary withIntermediateDirectories:YES attributes:nil error:NULL];
         NSURL *root = CanonicalURL([NSURL fileURLWithPath:temporary]);
         @try {
+            for (id value in @[@YES, @1, @"1", @"true", @"TRUE", @"yes", @"YES"])
+                Check(DeclaredBoolean(value), @"Explicit numeric/boolean/string helper declarations are accepted");
+            for (id value in @[@NO, @0, @"0", @"false", @"FALSE", @"no", @"NO", @"", @"1garbage", @"arbitrary", @[], @{}, NSNull.null])
+                Check(!DeclaredBoolean(value), @"False, malformed and unrelated values do not grant helper role");
+            Check(!DeclaredBoolean(nil), @"Absent helper declaration remains foreground");
             NSURL *main = Bundle(root, @"Browser.app", @"Browser");
             NSURL *helper = Bundle(main, @"Contents/Frameworks/Engine.framework/Versions/A/Helpers/Network.app", @"Network Helper");
-            Bundle(main, @"Contents/Library/LoginItems/Login.app", @"Login Helper");
+            NSURL *helperInfo = [helper URLByAppendingPathComponent:@"Contents/Info.plist"];
+            NSMutableDictionary *helperMetadata = [NSMutableDictionary dictionaryWithContentsOfURL:helperInfo];
+            helperMetadata[@"LSUIElement"] = @"1";
+            [helperMetadata writeToURL:helperInfo atomically:YES];
+            NSURL *login = Bundle(main, @"Contents/Library/LoginItems/Login.app", @"Login Helper");
+            NSURL *loginInfo = [login URLByAppendingPathComponent:@"Contents/Info.plist"];
+            NSMutableDictionary *loginMetadata = [NSMutableDictionary dictionaryWithContentsOfURL:loginInfo];
+            loginMetadata[@"LSBackgroundOnly"] = @YES;
+            [loginMetadata writeToURL:loginInfo atomically:YES];
             NSURL *resource = Bundle(main, @"Contents/Resources/Data.app", @"Resource Fixture");
             NSURL *outside = Bundle(root, @"Outside.app", @"Outside");
             NSString *alias = [main.path stringByAppendingPathComponent:@"Contents/Frameworks/Alias.app"];
@@ -41,6 +54,9 @@ int main(void) {
             AddApplicationFamily(main, entries, warnings);
             Check(entries.count == 3, @"Main and two contained helper bundles discovered");
             Check([entries[helper.path][@"name"] isEqual:@"Browser — Network Helper"], @"Helper labelled with owner");
+            Check([entries[helper.path][@"backgroundHelper"] boolValue], @"A real Info.plist string flag survives native catalog serialization");
+            Check([entries[login.path][@"backgroundHelper"] boolValue], @"Boolean LSBackgroundOnly also survives catalog serialization");
+            Check(![entries[main.path][@"backgroundHelper"] boolValue], @"Main application without helper flags remains foreground");
             Check([entries[helper.path][@"executablePath"] isEqual:[helper.path stringByAppendingPathComponent:@"Contents/MacOS/Fixture"]], @"Exact helper executable retained");
             Check(!entries[outside.path], @"Outside symlink target excluded");
             Check(!entries[resource.path], @"Resources are not executable helper discovery roots");
