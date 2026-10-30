@@ -107,7 +107,7 @@ final class V3ControllerTests {
         private String executable(String name) throws IOException {
             Path file = directory.resolve(name);
             Files.writeString(file, "test");
-            return file.toAbsolutePath().normalize().toString();
+            return RegressionFixtures.identity(file);
         }
 
         ActionResult setup(Map<String, String> routes, Set<String> auto) {
