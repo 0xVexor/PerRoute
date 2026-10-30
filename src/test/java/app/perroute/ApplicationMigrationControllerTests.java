@@ -44,6 +44,8 @@ public final class ApplicationMigrationControllerTests {
             };
         });
         var state = new AppState(); state.appPaths().add(exact);
+        if (!failWrite) Files.writeString(root.resolve("temporary-routes.json"), app.perroute.util.Json.stringify(Map.of("routes", List.of(
+                Map.of("app", exact, "node", "fixture-node", "startedAt", System.currentTimeMillis(), "until", System.currentTimeMillis()+600_000)))));
         var preferences = new ControllerTests.MemoryPreferences();
         preferences.putBoolean("v3.initialized", true); preferences.putBoolean("v3.qualityBackground", false);
         preferences.putBoolean("v3.routeMonitoring", false); preferences.putBoolean("autoUpdate", false);
@@ -63,6 +65,9 @@ public final class ApplicationMigrationControllerTests {
             }
             var unchanged = controller.previewApplicationMigration();
             check(unchanged.getSettings().equals(preview.getSettings()), "Preview comparison ignores serialization timestamp comments");
+            check(!controller.applyApplicationMigration(preview, choices).getOk(), "A live temporary override prevents identity conversion");
+            check(controller.temporaryRoutes(System.currentTimeMillis()).getFirst().getApplication().equals(exact), "Rejected migration leaves the temporary override intact");
+            check(controller.cancelTemporaryRoute(exact).getOk(), "Override can be cancelled explicitly before migration");
             check(!controller.applyApplicationMigration(preview, Map.of()).getOk(), "Missing scope consent is rejected by controller");
             state.setAdvancedRouting(true);
             check(!controller.applyApplicationMigration(preview, choices).getOk(), "Changed saved settings invalidate preview");
