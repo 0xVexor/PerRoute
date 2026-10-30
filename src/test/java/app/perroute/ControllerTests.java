@@ -284,7 +284,7 @@ final class ControllerTests {
         private String executable(String name) throws IOException {
             Path file = directory.resolve(name);
             Files.writeString(file, "test");
-            return file.toAbsolutePath().normalize().toString();
+            return RegressionFixtures.identity(file);
         }
 
         ActionResult assign(Map<String, String> routes, boolean advanced) {
@@ -636,6 +636,9 @@ final class ControllerTests {
     }
 
     static final class FakeBackend implements ConnectionBackend {
+        @Override public String selectApplication(String path) throws IOException {
+            return app.perroute.model.ApplicationIdentity.isMac(path) ? path : ConnectionBackend.super.selectApplication(path);
+        }
         @Override public boolean supportsRecipeImport() { return true; }
         @Override public boolean supportsWorkspaces() { return true; }
         @Override public boolean supportsLanBridge() { return true; }

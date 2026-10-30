@@ -157,7 +157,7 @@ tasks.register<JavaExec>("runPlatformBoundaryTests") {
     systemProperty("perroute.portOffset", "20000")
 }
 
-// Keep the v3 suites reachable even when a legacy Windows-path test stops runAllTests on another host.
+// Independent main-based suite entry points retain assertion counts and localize regression failures.
 listOf("Domain" to "domain", "Controller" to "controller", "5" to "v35", "Features" to "features").forEach { (name, suite) ->
     tasks.register<JavaExec>("runV3${name}Tests") {
         dependsOn(tasks.named("testClasses"))
