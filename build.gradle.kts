@@ -852,6 +852,13 @@ tasks.register<JavaExec>("runMacosApplicationFamilyRoutingTests") {
     enableAssertions = true
 }
 
+tasks.register<JavaExec>("runMacosApplicationGroupTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.platform.macos.MacApplicationGroupTests")
+    enableAssertions = true
+}
+
 tasks.register<JavaExec>("runMacosApplicationIconTests") {
     dependsOn(tasks.named("testClasses"), buildMacosDesktopBridge)
     classpath = sourceSets["test"].runtimeClasspath
