@@ -197,7 +197,7 @@ public final class MacPerAppBackendTests {
             Files.createDirectories(path.getParent()); Files.writeString(path,"fixture; never executed");
             check(path.toFile().setExecutable(true,true),"Family fixture executable permission");
             rows.add(Map.of("name",path.getFileName().toString(),"bundlePath",path.getParent().getParent().getParent().toString(),
-                    "executablePath",path.toString(),"bundleIdentifier","fixture.browser","signingIdentifier","","teamIdentifier","","signatureValid",false));
+                    "executablePath",path.toString(),"bundleIdentifier","fixture.browser","signingIdentifier","fixture.signed","teamIdentifier","FIXTURE","signatureValid",true,"backgroundHelper",true));
         }
         var unavailable=new boolean[1];
         var catalog=new MacApplicationCatalog(op -> {

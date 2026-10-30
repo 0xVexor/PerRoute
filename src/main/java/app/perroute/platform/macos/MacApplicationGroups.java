@@ -5,8 +5,27 @@ import java.util.*;
 
 /** Read-only picker grouping. Catalog observations never grant routing or migration authority. */
 public final class MacApplicationGroups {
+    public static app.perroute.backend.api.ApplicationGroup descriptor(Group group) {
+        String main = group.application().executablePath().toString();
+        String identity = group.outerApplication()
+                ? app.perroute.model.ApplicationIdentity.macAppFamily(main)
+                : app.perroute.model.ApplicationIdentity.macExecutable(main);
+        return new app.perroute.backend.api.ApplicationGroup(
+                new app.perroute.backend.api.ApplicationDescriptor(group.application().name(), identity),
+                group.members().stream().map(member -> app.perroute.model.ApplicationIdentity.macExecutable(
+                        member.executablePath().toString())).toList(), fingerprint(group));
+    }
+    private static String fingerprint(Group group) {
+        var observations = group.members().stream().map(member -> List.of(member.bundlePath().toString(),
+                member.executablePath().toString(), member.bundleIdentifier(), member.signingIdentifier(), member.teamIdentifier(),
+                Boolean.toString(member.signatureValid()), Boolean.toString(member.backgroundHelper()))).toList();
+        try {
+            return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(
+                    app.perroute.util.Json.stringify(observations).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
+    }
     public record Group(MacApplicationCatalog.Application application,
-                        List<MacApplicationCatalog.Application> members) {
+                        List<MacApplicationCatalog.Application> members, boolean outerApplication) {
         public Group { members = List.copyOf(members); }
     }
 
@@ -24,7 +43,11 @@ public final class MacApplicationGroups {
             groups.computeIfAbsent(owner.bundlePath().toString(), ignored -> new ArrayList<>()).add(member);
         }
         var result = new ArrayList<Group>();
-        groups.forEach((bundle, members) -> result.add(new Group(inventory.get(bundle), members)));
+        groups.forEach((bundle, members) -> {
+            var main = inventory.get(bundle);
+            boolean outer = inventory.values().stream().noneMatch(other -> !other.equals(main) && contains(other, main));
+            result.add(new Group(main, members, outer));
+        });
         return List.copyOf(result);
     }
 
@@ -34,7 +57,7 @@ public final class MacApplicationGroups {
         var observed = inventory(running);
         for (var app : observed.values()) {
             var previous = known.get(app.bundlePath().toString());
-            if (previous != null && !previous.equals(app))
+            if (previous != null && !sameIdentity(previous, app))
                 throw new IOException("Application identity changed. Refresh the installed and running lists.");
         }
         var result = new ArrayList<Group>();
@@ -45,7 +68,7 @@ public final class MacApplicationGroups {
                 result.add(group);
         }
         for (var app : observed.values()) {
-            if (!known.containsKey(app.bundlePath().toString())) result.add(new Group(app, List.of(app)));
+            if (!known.containsKey(app.bundlePath().toString())) result.add(new Group(app, List.of(app), false));
         }
         result.sort(Comparator.comparing(group -> group.application().bundlePath().toString()));
         return List.copyOf(result);
@@ -56,11 +79,20 @@ public final class MacApplicationGroups {
                 member.bundlePath().startsWith(outer.bundlePath().resolve("Contents"));
     }
 
+    private static boolean sameIdentity(MacApplicationCatalog.Application first, MacApplicationCatalog.Application second) {
+        // Installed helpers may have owner-prefixed labels, while the running catalog
+        // uses their original display name. Names are not process/application identity.
+        return first.bundlePath().equals(second.bundlePath()) && first.executablePath().equals(second.executablePath()) &&
+                first.bundleIdentifier().equals(second.bundleIdentifier()) && first.signingIdentifier().equals(second.signingIdentifier()) &&
+                first.teamIdentifier().equals(second.teamIdentifier()) && first.signatureValid() == second.signatureValid() &&
+                first.backgroundHelper() == second.backgroundHelper();
+    }
+
     private static boolean verifiedMember(MacApplicationCatalog.Application owner, MacApplicationCatalog.Application member) {
         if (owner.equals(member)) return true;
         // A shared team or display name alone cannot join apps. Missing team identity,
         // including system services outside the bundle, stays separate for attribution.
-        return contains(owner, member) && owner.signatureValid() && member.signatureValid() &&
+        return contains(owner, member) && member.backgroundHelper() && owner.signatureValid() && member.signatureValid() &&
                 !owner.signingIdentifier().isBlank() && !member.signingIdentifier().isBlank() &&
                 !owner.teamIdentifier().isBlank() && owner.teamIdentifier().equals(member.teamIdentifier());
     }

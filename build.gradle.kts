@@ -923,3 +923,19 @@ val fetchMacosXray = tasks.register<Exec>("fetchMacosXray") {
 stageNativeResources.configure {
     if (System.getProperty("os.name") == "Mac OS X") dependsOn(fetchMacosXray)
 }
+
+
+tasks.register<JavaExec>("runApplicationSetupMigrationTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.ApplicationSetupMigrationTests")
+    enableAssertions = true
+}
+
+
+tasks.register<JavaExec>("runApplicationMigrationControllerTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.ApplicationMigrationControllerTests")
+    enableAssertions = true
+}

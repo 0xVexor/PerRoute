@@ -53,4 +53,11 @@ internal class AutoRouting(private val quality: QualityService, private val cloc
     fun forget(apps: Collection<String>) { decisions.keys.retainAll(apps.toSet()) }
 
     fun clear() = decisions.clear()
+
+    fun migrate(aliases: Map<String, String>) {
+        val migrated = decisions.entries.groupBy { app.perroute.model.ApplicationSetupMigration.historyIdentity(it.key, aliases) }
+            .mapValues { (_, entries) -> entries.maxBy { it.value.atMillis }.value }
+        decisions.clear()
+        decisions.putAll(migrated)
+    }
 }

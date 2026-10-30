@@ -11,7 +11,12 @@ import java.util.*;
 /** Read-only executable candidates; signing metadata is observational, not routing authority. */
 public final class MacApplicationCatalog {
     public record Application(String name, Path bundlePath, Path executablePath, String bundleIdentifier,
-                              String signingIdentifier, String teamIdentifier, boolean signatureValid) { }
+                              String signingIdentifier, String teamIdentifier, boolean signatureValid, boolean backgroundHelper) {
+        public Application(String name, Path bundlePath, Path executablePath, String bundleIdentifier,
+                           String signingIdentifier, String teamIdentifier, boolean signatureValid) {
+            this(name, bundlePath, executablePath, bundleIdentifier, signingIdentifier, teamIdentifier, signatureValid, false);
+        }
+    }
     public record Snapshot(List<Application> applications, List<String> warnings) {
         public Snapshot { applications = List.copyOf(applications); warnings = List.copyOf(warnings); }
     }
@@ -45,12 +50,14 @@ public final class MacApplicationCatalog {
             for (Object row : rows) {
                 if (!(row instanceof Map<?, ?> values) || !(values.get("signatureValid") instanceof Boolean valid))
                     throw new IllegalArgumentException("Invalid application metadata");
+                Object helper = values.get("backgroundHelper");
+                if (helper != null && !(helper instanceof Boolean)) throw new IllegalArgumentException("Invalid helper role");
                 Path bundle = absolute(values, "bundlePath"), executable = absolute(values, "executablePath");
                 if (!bundle.toString().endsWith(".app") || !executable.startsWith(bundle.resolve("Contents/MacOS")))
                     throw new IllegalArgumentException("Executable outside application bundle");
                 var app = new Application(string(values, "name", false), bundle, executable,
                         string(values, "bundleIdentifier", false), string(values, "signingIdentifier", true),
-                        string(values, "teamIdentifier", true), valid);
+                        string(values, "teamIdentifier", true), valid, Boolean.TRUE.equals(helper));
                 if (apps.putIfAbsent(bundle.toString(), app) != null) throw new IllegalArgumentException("Duplicate bundle path");
             }
             var messages = new ArrayList<String>();

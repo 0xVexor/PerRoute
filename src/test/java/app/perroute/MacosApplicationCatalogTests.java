@@ -22,6 +22,7 @@ public final class MacosApplicationCatalogTests {
         check(snapshot.applications().size() == 2, "Case-sensitive bundle paths remain distinct despite duplicate bundle IDs");
         check(snapshot.applications().getFirst().name().equals("Editor فارسی"), "Unicode labels preserved");
         check(!snapshot.applications().getFirst().signatureValid(), "Unsigned observations are explicit, not fabricated trusted identities");
+        check(!snapshot.applications().getFirst().backgroundHelper(), "Older catalog payloads do not infer a helper role");
         check(snapshot.warnings().equals(List.of("Partial inventory")), "Incomplete inventory warning preserved");
         try { snapshot.applications().clear(); throw new AssertionError("Mutable snapshot"); } catch (UnsupportedOperationException expected) { checks++; }
         try { snapshot.warnings().clear(); throw new AssertionError("Mutable warnings"); } catch (UnsupportedOperationException expected) { checks++; }
@@ -54,6 +55,13 @@ public final class MacosApplicationCatalogTests {
             var installed = real.installed(); var running = real.running();
             check(!installed.applications().isEmpty(), "Known macOS application roots produce an inventory");
             check(installed.warnings().isEmpty(), "Installed inventory is complete enough for the picker");
+            var groups = app.perroute.platform.macos.MacApplicationGroups.installed(installed);
+            var chrome = installed.applications().stream().filter(value -> value.bundleIdentifier().equals("com.google.Chrome")).findFirst();
+            if (chrome.isPresent()) {
+                var group = groups.stream().filter(value -> value.application().equals(chrome.get())).findFirst().orElseThrow();
+                check(group.members().size() > 1, "Installed Chrome exposes verified background helpers for logical grouping");
+                check(group.members().stream().skip(1).allMatch(value -> value.backgroundHelper()), "Live grouped helpers declare a background role");
+            }
             var safariAlias = java.nio.file.Path.of("/Applications/Safari.app");
             if (java.nio.file.Files.exists(safariAlias)) {
                 var safariExecutable = safariAlias.resolve("Contents/MacOS/Safari").toRealPath();

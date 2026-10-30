@@ -102,6 +102,7 @@ internal fun NewAppsPage(shell: Shell) {
                         joinNames(unresolved.map { appName(it.first) }) + ".", Modifier.fillMaxWidth(), Amber, Icons.Rounded.WarningAmber)
                 }
             }
+            ApplicationGroupingControls(shell, model)
             Spacer(Modifier.height(16.dp))
             NewTableHeader {
                 Box(Modifier.width(34.dp))

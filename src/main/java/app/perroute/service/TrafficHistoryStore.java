@@ -2,6 +2,7 @@ package app.perroute.service;
 
 import app.perroute.util.Json;
 import app.perroute.model.ApplicationIdentity;
+import app.perroute.model.ApplicationSetupMigration;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +41,10 @@ public final class TrafficHistoryStore implements AutoCloseable {
     }
 
     public synchronized Snapshot snapshot() {
+        return snapshot(Map.of());
+    }
+
+    public synchronized Snapshot snapshot(Map<String,String> aliases) {
         String today = LocalDate.now().toString();
         String month = YearMonth.now().toString();
         long todayDown = 0, todayUp = 0, monthDown = 0, monthUp = 0;
@@ -50,7 +55,8 @@ public final class TrafficHistoryStore implements AutoCloseable {
                 if (day.getKey().equals(today)) { todayDown += app.getValue().down; todayUp += app.getValue().up; }
                 if (currentMonth) {
                     monthDown += app.getValue().down; monthUp += app.getValue().up;
-                    Counters target = combined.computeIfAbsent(app.getKey(), ignored -> new Counters());
+                    String identity = ApplicationSetupMigration.historyIdentity(app.getKey(), aliases);
+                    Counters target = combined.computeIfAbsent(identity, ignored -> new Counters());
                     target.down += app.getValue().down; target.up += app.getValue().up;
                 }
             }
@@ -63,6 +69,10 @@ public final class TrafficHistoryStore implements AutoCloseable {
     }
 
     public synchronized Report report(String applicationFilter) {
+        return report(applicationFilter, Map.of());
+    }
+
+    public synchronized Report report(String applicationFilter, Map<String,String> aliases) {
         String filter = applicationFilter == null ? "" : ApplicationIdentity.isMac(applicationFilter) ? applicationFilter : applicationFilter.trim();
         String today = LocalDate.now().toString();
         String month = YearMonth.now().toString();
@@ -74,13 +84,15 @@ public final class TrafficHistoryStore implements AutoCloseable {
             if (!day.getKey().startsWith(month)) continue;
             long dayDown = 0, dayUp = 0;
             for (var app : day.getValue().entrySet()) {
-                Counters monthTarget = monthApps.computeIfAbsent(app.getKey(), ignored -> new Counters());
+                String identity = ApplicationSetupMigration.historyIdentity(app.getKey(), aliases);
+                Counters monthTarget = monthApps.computeIfAbsent(identity, ignored -> new Counters());
                 monthTarget.down += app.getValue().down; monthTarget.up += app.getValue().up;
                 if (day.getKey().equals(today)) {
-                    Counters todayTarget = todayApps.computeIfAbsent(app.getKey(), ignored -> new Counters());
+                    Counters todayTarget = todayApps.computeIfAbsent(identity, ignored -> new Counters());
                     todayTarget.down += app.getValue().down; todayTarget.up += app.getValue().up;
                 }
-                if (!filter.isEmpty() && !ApplicationIdentity.same(app.getKey(), filter)) continue;
+                if (!filter.isEmpty() && !ApplicationIdentity.same(identity,
+                        ApplicationSetupMigration.historyIdentity(filter, aliases))) continue;
                 dayDown += app.getValue().down; dayUp += app.getValue().up;
             }
             monthDown += dayDown; monthUp += dayUp;

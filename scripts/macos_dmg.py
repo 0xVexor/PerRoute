@@ -155,7 +155,7 @@ registered=false. Do not use this removal command while another PerRoute instanc
 TEST THIS PREVIEW
 After removing the previous app/helper, copy from this DMG, launch from Applications and import
 or select a working configuration. Check first-time approval, System proxy Connect/Disconnect,
-then Chrome including helpers in Smart per-app. Keep other VPN/proxy tools disconnected for a
+then select Chrome once in Smart per-app; its verified helpers follow its route. Keep other VPN/proxy tools disconnected for a
 clear comparison. Test website content, not just an IP check. Check normal internet after Disconnect.
 
 LIMITS

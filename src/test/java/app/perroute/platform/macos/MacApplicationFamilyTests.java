@@ -22,7 +22,7 @@ public final class MacApplicationFamilyTests {
         Files.createDirectories(executable.getParent()); Files.writeString(executable,"fixture, never executed");
         if (!executable.toFile().setExecutable(true,true)) throw new IOException("Cannot mark fixture executable");
         return Map.of("name",name,"bundlePath",bundle.toString(),"executablePath",executable.toString(),
-                "bundleIdentifier","fixture.same.identifier","signatureValid",false,"signingIdentifier","","teamIdentifier","");
+                "bundleIdentifier","fixture.same.identifier","signatureValid",true,"signingIdentifier","fixture.signed","teamIdentifier","FIXTURE","backgroundHelper",true);
     }
     public static void main(String[] args) throws Exception {
         Path root=Files.createTempDirectory("perroute-families-").toRealPath();
@@ -38,10 +38,10 @@ public final class MacApplicationFamilyTests {
             var catalog=new MacApplicationCatalog(op -> { reads[0]++; return Json.stringify(Map.of("version",1,"applications",rows,"warnings",warnings)); });
             var families=new MacApplicationFamilies(catalog);
             String path=(String)main.get("executablePath"), exact=ApplicationIdentity.macExecutable(path), family=ApplicationIdentity.macAppFamily(path);
-            var descriptors=MacApplicationFamilies.descriptors(catalog.installed());
-            check(descriptors.size()==5,"Main/helpers retained, one explicit family offered");
-            check(descriptors.stream().filter(app -> ApplicationIdentity.isMacFamily(app.path())).count()==1,"Nested helpers cannot independently broaden into a family");
-            check(descriptors.stream().anyMatch(app -> app.path().equals(family) && app.name().endsWith("(including helpers)")),"Family scope is explicit in picker");
+            var descriptors=MacApplicationGroups.installed(catalog.installed()).stream().map(MacApplicationGroups::descriptor).map(value -> value.application()).toList();
+            check(descriptors.size()==2,"One choice per outer application; contained helpers are internal");
+            check(descriptors.stream().filter(app -> ApplicationIdentity.isMacFamily(app.path())).count()==2,"Only the two outer applications offer logical app identities");
+            check(descriptors.stream().anyMatch(app -> app.path().equals(family) && app.name().equals("Browser")),"Logical application label has no duplicate including-helpers choice");
             check(families.validateSelection(family).equals(family),"Observed canonical outer family can be selected");
             var route=new AppGateway.Route(family,0,18001,18002);
             reads[0]=0; var bindings=families.bindings(List.of(route));
@@ -57,10 +57,21 @@ public final class MacApplicationFamilyTests {
             fails(() -> families.bindings(List.of(route,new AppGateway.Route(ApplicationIdentity.macExecutable((String)helper.get("executablePath")),1,18003,18004))));
             fails(() -> families.validateSelection(ApplicationIdentity.macAppFamily((String)helper.get("executablePath"))));
             fails(() -> families.validateSelection(ApplicationIdentity.macAppFamily(root.resolve("Missing.app/Contents/MacOS/Missing").toString())));
+            var foreign = new LinkedHashMap<String,Object>(helper); foreign.put("teamIdentifier", "FOREIGN");
+            rows.set(rows.indexOf(helper), foreign);
+            check(families.bindings(List.of(route)).size()==2,"Foreign-signed nested helper cannot gain routing through grouping");
+            rows.set(rows.indexOf(foreign), helper);
+            var safari = new LinkedHashMap<String,Object>(fixture(root.resolve("Safari.app"),"Safari"));
+            safari.put("bundleIdentifier", "com.apple.Safari"); safari.put("signingIdentifier", "com.apple.Safari"); safari.put("teamIdentifier", "");
+            rows.add(safari);
+            var safariRoute = families.bindings(List.of(new AppGateway.Route(ApplicationIdentity.macAppFamily((String)safari.get("executablePath")),0,18001,18002)));
+            check(safariRoute.size()==1 && safariRoute.getFirst().scope()==app.perroute.platform.macos.routing.MacPerAppRoutingPlan.Scope.SAFARI_APPLICATION,
+                    "Logical Safari keeps explicit responsible-application scope");
+            rows.remove(safari);
             warnings.add("Partial inventory");
             fails(() -> families.bindings(List.of(route)));
             fails(() -> families.validateSelection(family));
-            fails(() -> MacApplicationFamilies.descriptors(catalog.installed()));
+            fails(() -> MacApplicationGroups.installed(catalog.installed()).stream().map(MacApplicationGroups::descriptor).map(value -> value.application()).toList());
             warnings.clear();
             Path helperExecutable=Path.of((String)helper.get("executablePath"));
             Files.delete(helperExecutable); Files.createSymbolicLink(helperExecutable,Path.of((String)other.get("executablePath")));

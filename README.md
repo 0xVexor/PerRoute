@@ -121,8 +121,10 @@ For collaborator testing, use the Apple Silicon `.pkg` Installer package from `b
 
 1. Disconnect and Quit an existing PerRoute instance. Open the `.pkg` and follow Installer's prompts to install on the startup disk. The optional DMG still supports dragging **PerRoute.app** to **Applications** and ejecting the disk.
 2. Open **Applications > PerRoute**.
-3. Import your server and choose a mode. For per-app routing, select the app including helpers in **Apps** and save.
+3. Import your server and choose a mode. For per-app routing, select the app once in **Apps** and save. Its verified contained helpers follow the same route.
 4. Click **Connect**. The PKG has already installed the helper; approve Keychain access if requested. Click **Disconnect** when finished. The optional DMG still requests helper setup separately on first Connect.
+
+When upgrading from separate executable/helper choices, use **Apps > Review saved app selections** while disconnected. Review current settings, each profile, and shared Auto pools/bandwidth limits before applying. Equivalent settings combine; conflicting assignments require a choice. Expanding an exact executable selection to the full app requires explicit consent. Choose **Keep exact selections** to preserve its scope, and turn on **Show executable selections** to edit those entries. **Browse for an application** still selects an individual executable. Traffic history keeps its original records and combines them under the migrated app identity.
 
 The preview PKG is unsigned and not notarized; the app retains its local certificate signature. Installer and app launch security checks still apply. If macOS offers an override for a trusted download, use **System Settings > Privacy & Security > Open Anyway** after the first attempt. See [Apple's instructions](https://support.apple.com/102445). Changing package format does not fix an unidentified launch failure. If macOS only says the app cannot be opened, report the output of `open /Applications/PerRoute.app` and `/Applications/PerRoute.app/Contents/MacOS/PerRoute`. Always launch the installed copy.
 
