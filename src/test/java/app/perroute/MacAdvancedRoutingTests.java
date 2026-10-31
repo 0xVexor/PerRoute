@@ -8,6 +8,7 @@ import app.perroute.compose.controller.PerRouteController;
 import app.perroute.model.*;
 import app.perroute.persistence.AppStateStore;
 import app.perroute.platform.macos.MacConnectionBackend;
+import app.perroute.platform.macos.MacApplicationCatalog;
 import app.perroute.platform.macos.MacPreviewSession;
 import app.perroute.platform.macos.proxy.HelperSystemProxyLifecycle;
 import app.perroute.platform.macos.proxy.MacSystemProxyLifecycle;
@@ -62,7 +63,8 @@ public final class MacAdvancedRoutingTests {
             @Override public void apply() { throw new AssertionError("No host proxy changes in this fixture"); }
             @Override public void restore() { }
         };
-        var backend = new MacConnectionBackend(runtime, directory.resolve("core"), true, proxy, new MacTunSessionClient(peer, marker));
+        var catalog = new MacApplicationCatalog(operation -> Json.stringify(Map.of("version", 1, "applications", List.of(), "warnings", List.of())));
+        var backend = new MacConnectionBackend(runtime, directory.resolve("core"), true, proxy, new MacTunSessionClient(peer, marker), catalog);
         var starts = new AtomicInteger();
         var mutations = new AtomicInteger();
         var isolated = (ConnectionBackend) java.lang.reflect.Proxy.newProxyInstance(ConnectionBackend.class.getClassLoader(),
@@ -102,7 +104,8 @@ public final class MacAdvancedRoutingTests {
         var policy = new RouteHealthTracker.Policy(60_000L, 100L, 200L, 2, 2, 1_000L);
         try (var controller = new PerRouteController(state, AppStateStore.inMemory(), isolated, preferences, policy, 60_000L)) {
             seed(controller, b.node(), 10); seed(controller, c.node(), 80); seed(controller, d.node(), 140);
-            check(controller.saveApplicationSetup(state.appPaths(), Map.of(game, c.node().key()), true, Set.of(chat), Map.of()).getOk(), "Save dedicated and Auto selections");
+            var saved = controller.saveApplicationSetup(state.appPaths(), Map.of(game, c.node().key()), true, Set.of(chat), Map.of());
+            check(saved.getOk(), "Save dedicated and Auto selections: " + saved.getMessage());
             var connected = controller.connect();
             check(connected.getOk(), "Connect: " + connected.getMessage());
             equal(b.node().key(), auto(controller, chat).getNode().key());
