@@ -802,6 +802,15 @@ tasks.register<JavaExec>("runApplicationIdentityTests") {
 }
 
 // Actual loopback Xray/gateway exercise; the privileged helper is simulated and never activates capture.
+tasks.register<JavaExec>("runMacosAdvancedRoutingTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.MacAdvancedRoutingTests")
+    systemProperty("perroute.portOffset", "15000")
+    args(layout.projectDirectory.dir("tools/xray").asFile.absolutePath)
+    enableAssertions = true
+}
+
 tasks.register<JavaExec>("runMacosPerAppBackendTests") {
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath

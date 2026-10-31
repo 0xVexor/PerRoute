@@ -50,6 +50,13 @@ jobs:
         run: |
           set -o pipefail
           sh gradlew --no-daemon -PofficialRepositories=true runAllTests runPlatformBoundaryTests runApplicationIdentityTests 2>&1 | tee regression.log
+      - name: macOS real-core lifecycle with simulated capture helper
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/fetch_macos_xray.py --with-geodata
+          sh gradlew --no-daemon -PofficialRepositories=true runMacosAdvancedRoutingTests runMacosPerAppBackendTests 2>&1 | tee -a regression.log
       - name: Retain assertion counts and explicit skip reports
         if: always()
         uses: actions/upload-artifact@v4
