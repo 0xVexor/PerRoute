@@ -71,9 +71,18 @@ final class MacPerAppDestinationTests {
                     socket.connect(new InetSocketAddress("8.8.4.4", 443), 3000);
                     if (tls) {
                         var engine = SSLContext.getDefault().createSSLEngine("browser-destination.test", 443);
-                        engine.setUseClientMode(true); engine.beginHandshake();
+                        engine.setUseClientMode(true);
+                        // Peer-host hints do not guarantee SNI across JSSE/provider updates.
+                        // The fixture must actually send the hostname that Xray is expected to recover.
+                        var parameters = engine.getSSLParameters();
+                        parameters.setServerNames(List.of(new javax.net.ssl.SNIHostName("browser-destination.test")));
+                        engine.setSSLParameters(parameters);
+                        engine.beginHandshake();
                         var hello = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
-                        engine.wrap(ByteBuffer.allocate(0), hello);
+                        var wrapped = engine.wrap(ByteBuffer.allocate(0), hello);
+                        if (wrapped.getStatus() != javax.net.ssl.SSLEngineResult.Status.OK || wrapped.bytesProduced() == 0 ||
+                                !new String(hello.array(), 0, hello.position(), StandardCharsets.ISO_8859_1).contains("browser-destination.test"))
+                            throw new AssertionError("TLS fixture did not produce a ClientHello with its explicit SNI hostname");
                         socket.getOutputStream().write(hello.array(), 0, hello.position());
                     } else {
                         socket.getOutputStream().write("GET / HTTP/1.1\r\nHost: browser-destination.test\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
