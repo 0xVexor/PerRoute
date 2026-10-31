@@ -807,6 +807,7 @@ tasks.register<JavaExec>("runMacosAdvancedRoutingTests") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("app.perroute.MacAdvancedRoutingTests")
     systemProperty("perroute.portOffset", "15000")
+    systemProperty("compose.application.resources.dir", layout.buildDirectory.dir("macos-fixture-no-resources").get().asFile.absolutePath)
     args(layout.projectDirectory.dir("tools/xray").asFile.absolutePath)
     enableAssertions = true
 }
@@ -816,6 +817,7 @@ tasks.register<JavaExec>("runMacosPerAppBackendTests") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("app.perroute.platform.macos.MacPerAppBackendTests")
     systemProperty("perroute.portOffset", "15000")
+    systemProperty("compose.application.resources.dir", layout.buildDirectory.dir("macos-fixture-no-resources").get().asFile.absolutePath)
     args(layout.projectDirectory.dir("tools/xray").asFile.absolutePath)
     enableAssertions = true
 }
