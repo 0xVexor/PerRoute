@@ -19,7 +19,7 @@ def sha256(path):
     return result.hexdigest()
 
 
-def fetch():
+def fetch(include_geodata=False):
     target = {'arm64': 'macos-arm64', 'x86_64': 'macos-x64'}[platform.machine()]
     lock = json.loads((ROOT / 'browser/helper/xray/xray.lock.json').read_text())
     asset = lock['assets'][target]
@@ -31,8 +31,9 @@ def fetch():
         if sha256(binary) != asset['binarySha256']:
             raise ValueError('Cached Xray differs from the pinned binary; preserve it separately before rebuilding')
         binary.chmod(0o755)
-        print(f'Pinned {target} Xray verified: {lock["version"]}')
-        return
+        if not include_geodata:
+            print(f'Pinned {target} Xray verified: {lock["version"]}')
+            return
     if lock['source'] != 'https://github.com/XTLS/Xray-core/releases/download':
         raise ValueError('Unexpected Xray download source')
     directory.mkdir(parents=True, exist_ok=True)
@@ -60,6 +61,21 @@ def fetch():
                 raise ValueError('Extracted Xray checksum mismatch')
             staged.chmod(0o755)
             staged.replace(binary)
+            # Controller-generated configs use geoip:private. Fresh lifecycle CI must not
+            # accidentally depend on data files left by an earlier local installation.
+            if include_geodata:
+                for name in ('geoip.dat', 'geosite.dat'):
+                    entries = [item for item in package.infolist() if item.filename == name]
+                    if len(entries) != 1 or not 0 < entries[0].file_size <= 64 * 1024 * 1024:
+                        raise ValueError(f'Expected one bounded {name} in the verified Xray archive')
+                    data = package.read(entries[0])
+                    destination = directory / name
+                    if destination.is_symlink():
+                        raise ValueError('Refusing aliased Xray geodata')
+                    staged_data = Path(temporary) / name
+                    staged_data.write_bytes(data)
+                    staged_data.chmod(0o644)
+                    staged_data.replace(destination)
             if 'LICENSE' in package.namelist():
                 info = package.getinfo('LICENSE')
                 if info.file_size > 131072:
@@ -69,4 +85,7 @@ def fetch():
 
 
 if __name__ == '__main__':
-    fetch()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--with-geodata', action='store_true', help='Stage geodata from the same verified archive for controller lifecycle tests')
+    fetch(parser.parse_args().with_geodata)
