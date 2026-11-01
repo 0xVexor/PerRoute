@@ -618,7 +618,8 @@ commit count and source revision.
 
 The Installers and release builds workflow builds Windows x64 and macOS arm64 on
 pushes to `main` or `build/**`. A matching `vX.Y.Z` tag publishes a GitHub release
-only after both platforms pass their checks. It verifies common version, source
+only after both platforms pass their checks. Tag publication reuses successful
+installer artifacts for that exact commit when available; otherwise it builds them. It verifies common version, source
 revision, build number and asset hashes before publication, then includes SHA256SUMS.
 The workflow keeps the previous latest release until a signed update manifest is
 available, so publishing manual downloads does not break existing update checks.

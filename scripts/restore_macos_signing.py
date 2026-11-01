@@ -37,12 +37,14 @@ def run(*args):
     result = subprocess.run([str(arg) for arg in args], text=True, capture_output=True)
     if result.returncode:
         # security arguments contain private passwords. Never echo the command.
-        raise SystemExit(f'{Path(args[0]).name} failed preparing the CI signing identity')
+        detail = result.stderr.strip() if Path(args[0]).name == 'codesign' else 'private command details omitted'
+        raise SystemExit(f'{Path(args[0]).name} failed preparing the CI signing identity: {detail}')
     return result.stdout
 
 
 keychain = root / 'identity.keychain-db'
 portable = root / 'identity.p12'
+print('Preparing portable identity' if portable.exists() else 'Preparing existing keychain identity')
 if portable.exists():
     run('/usr/bin/security', 'create-keychain', '-p', settings['password'], keychain)
 os.chmod(keychain, 0o600)
@@ -56,6 +58,7 @@ run('/usr/bin/security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,cod
 previous = shlex.split(run('/usr/bin/security', 'list-keychains', '-d', 'user'))
 # This runner is disposable. Search-list registration allows codesign to resolve
 # the imported certificate and its key without changing any local developer state.
+previous = [item for item in previous if Path(item).resolve() != keychain.resolve()]
 run('/usr/bin/security', 'list-keychains', '-d', 'user', '-s', keychain, *previous)
 portable.unlink(missing_ok=True)
 probe = root / 'signing-probe'

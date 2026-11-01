@@ -18,13 +18,30 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: installers-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.reuse.outputs.run_id }}
+    steps:
+      - name: Reuse verified installer artifacts for this exact tagged source
+        id: reuse
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release-builds.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success&per_page=20" --jq '.workflow_runs | map(select(.head_sha == env.GITHUB_SHA)) | .[0].id // empty')
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
   windows:
+    needs: plan
+    if: needs.plan.outputs.run_id == ''
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -74,6 +91,8 @@ jobs:
           if-no-files-found: error
 
   macos:
+    needs: plan
+    if: needs.plan.outputs.run_id == ''
     runs-on: macos-15
     timeout-minutes: 45
     env:
@@ -122,17 +141,20 @@ jobs:
         run: rm -rf .perroute-local-signing
 
   release:
-    if: github.ref_type == 'tag'
-    needs: [windows, macos]
+    if: always() && github.ref_type == 'tag' && needs.plan.result == 'success' && (needs.plan.outputs.run_id != '' || (needs.windows.result == 'success' && needs.macos.result == 'success'))
+    needs: [plan, windows, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
+          run-id: ${{ needs.plan.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
           pattern: release-*
           path: build/publish
           merge-multiple: true
