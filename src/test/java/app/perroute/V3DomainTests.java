@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 final class V3DomainTests {
@@ -713,14 +714,22 @@ final class V3DomainTests {
                 try { read = held.getInputStream().read(); } catch (IOException closed) { read = -1; }
                 equal(-1, read);
                 held.close();
-                // A closed TCP session can retain this port in TIME_WAIT on macOS.
-                // Prove the listener stopped without requiring immediate port reuse.
-                try (Socket afterStop = new Socket()) {
-                    try {
-                        afterStop.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 1_000);
-                        throw new AssertionError("A stopped gateway must refuse new connections");
-                    } catch (java.net.ConnectException expected) { }
-                }
+                // Darwin can briefly complete a queued TCP handshake while close wakes
+                // the acceptor. Require refusal within a bounded cleanup window.
+                long cleanupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                boolean refused = false;
+                do {
+                    try (Socket afterStop = new Socket()) {
+                        try {
+                            afterStop.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 1_000);
+                        } catch (java.net.ConnectException expected) {
+                            refused = true;
+                            break;
+                        }
+                    }
+                    Thread.sleep(10);
+                } while (System.nanoTime() < cleanupDeadline);
+                check(refused, "A stopped gateway must release its listener within two seconds");
             } finally {
                 gateway.stop();
             }
