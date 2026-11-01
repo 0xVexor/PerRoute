@@ -13,10 +13,10 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("PerRoute Recovery")]
 [assembly: AssemblyDescription("Puts the network back and rolls PerRoute back, even when PerRoute does not open")]
-[assembly: AssemblyCompany("Ali Mirzad")]
+[assembly: AssemblyCompany("PerRoute")]
 [assembly: AssemblyProduct("PerRoute")]
-[assembly: AssemblyVersion("3.6.0.0")]
-[assembly: AssemblyFileVersion("3.6.0.0")]
+[assembly: AssemblyVersion(ReleaseInfo.Version + ".0")]
+[assembly: AssemblyFileVersion(ReleaseInfo.Version + ".0")]
 
 namespace PerRouteRecovery
 {

@@ -10,13 +10,14 @@ plugins {
 }
 
 group = "app.perroute"
-version = "3.6.0"
+version = providers.gradleProperty("appVersion").get()
 
 val sourceRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.map { it.trim() }
 val sourceBuildNumber = providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.map { it.trim() }
 val generatedBuildInfo = layout.buildDirectory.dir("generated/build-info")
 val generateBuildInfo = tasks.register("generateBuildInfo") {
     inputs.property("revision", sourceRevision)
+    inputs.file(layout.projectDirectory.file("gradle.properties"))
     inputs.property("number", sourceBuildNumber)
     inputs.property("version", project.version.toString())
     outputs.dir(generatedBuildInfo)
@@ -74,7 +75,7 @@ compose.desktop {
             appResourcesRootDir.set(layout.buildDirectory.dir("native-resources"))
             targetFormats(TargetFormat.Exe)
             packageName = "PerRoute"
-            packageVersion = "3.6.0"
+            packageVersion = project.version.toString()
             description = "Modern per-application proxy client"
             vendor = "PerRoute"
             macOS {

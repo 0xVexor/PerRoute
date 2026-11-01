@@ -1,3 +1,5 @@
+param([switch]$OfficialRepositories)
+
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BuildRoot = Join-Path $ProjectRoot 'build'
@@ -6,7 +8,16 @@ $GradleHome = Join-Path $ProjectRoot '.gradle-home'
 $BootstrapGradle = Join-Path $BuildRoot 'gradle-bootstrap\gradle-9.7.0\bin\gradle.bat'
 $Wrapper = Join-Path $ProjectRoot 'gradlew.bat'
 $Gradle = if (Test-Path -LiteralPath $BootstrapGradle) { $BootstrapGradle } else { $Wrapper }
-$Version = '3.6.0'
+$Version = ((Get-Content -LiteralPath (Join-Path $ProjectRoot 'gradle.properties') | Where-Object { $_ -match '^appVersion=' }) -replace '^appVersion=', '').Trim()
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid shared appVersion in gradle.properties.' }
+$GeneratedInstaller = Join-Path $BuildRoot 'generated-installer'
+New-Item -ItemType Directory -Force -Path $GeneratedInstaller | Out-Null
+$ReleaseInfo = Join-Path $GeneratedInstaller 'ReleaseInfo.cs'
+Set-Content -LiteralPath $ReleaseInfo -Value "internal static class ReleaseInfo { internal const string Version = `"$Version`"; }" -Encoding utf8
+foreach ($Manifest in 'installer', 'uninstaller', 'recovery') {
+    $Template = Get-Content -LiteralPath (Join-Path $ProjectRoot "installer/$Manifest.manifest") -Raw
+    Set-Content -LiteralPath (Join-Path $GeneratedInstaller "$Manifest.manifest") -Value $Template.Replace('@VERSION@', $Version) -Encoding utf8
+}
 $VendorDir = Join-Path $BuildRoot 'vendor'
 
 function Get-VerifiedAsset {
@@ -79,7 +90,11 @@ $WindowsPacketFilter = Get-VerifiedAsset `
     -Sha256 '9C388C0B7F189F7FA98720BAE2CAECF7D64F30910838B80B438ECF8956B8502C' `
     -Length 819200
 
-& $Gradle -g $GradleHome --no-daemon createDistributable
+& (Join-Path $ProjectRoot 'scripts/fetch_windows_xray.ps1')
+$GradleArguments = @('-g', $GradleHome, '--no-daemon')
+if ($OfficialRepositories) { $GradleArguments += '-PofficialRepositories=true' }
+$GradleArguments += 'createDistributable'
+& $Gradle @GradleArguments
 if ($LASTEXITCODE -ne 0) { throw 'Compose Desktop build failed.' }
 
 # Browser extension and its runtime (helper + pinned Xray). See browser/README.md.
@@ -137,10 +152,10 @@ $CommonReferences = @(
     '/reference:System.Drawing.dll',
     '/reference:System.Windows.Forms.dll'
 )
-& $Csc /nologo /target:winexe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\src\main\resources\icons\perroute.ico" "/win32manifest:$ProjectRoot\installer\uninstaller.manifest" "/out:$PackagedApp\Uninstall.exe" $CommonReferences (Join-Path $ProjectRoot 'installer\WindowsUninstaller.cs')
+& $Csc /nologo /target:winexe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\src\main\resources\icons\perroute.ico" "/win32manifest:$GeneratedInstaller\uninstaller.manifest" "/out:$PackagedApp\Uninstall.exe" $CommonReferences $ReleaseInfo (Join-Path $ProjectRoot 'installer\WindowsUninstaller.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Could not compile the PerRoute uninstaller.' }
 
-& $Csc /nologo /target:winexe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\src\main\resources\icons\perroute.ico" "/win32manifest:$ProjectRoot\installer\recovery.manifest" "/out:$PackagedApp\PerRouteRecovery.exe" $CommonReferences '/reference:System.Web.Extensions.dll' (Join-Path $ProjectRoot 'installer\WindowsRecovery.cs')
+& $Csc /nologo /target:winexe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\src\main\resources\icons\perroute.ico" "/win32manifest:$GeneratedInstaller\recovery.manifest" "/out:$PackagedApp\PerRouteRecovery.exe" $CommonReferences '/reference:System.Web.Extensions.dll' $ReleaseInfo (Join-Path $ProjectRoot 'installer\WindowsRecovery.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Could not compile the PerRoute recovery tool.' }
 Set-Content -LiteralPath (Join-Path $PackagedApp 'perroute-version.txt') -Value $Version -NoNewline -Encoding ascii
 
@@ -175,7 +190,7 @@ $InstallerReferences = $CommonReferences + @(
     '/reference:System.IO.Compression.FileSystem.dll'
 )
 $ExtensionId = Join-Path $BrowserRoot 'protocol\extension-id.txt'
-& $Csc /nologo /target:winexe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\src\main\resources\icons\perroute.ico" "/win32manifest:$ProjectRoot\installer\installer.manifest" "/resource:$PortableZip,PerRoute.Payload" "/resource:$BrowserZip,PerRoute.BrowserPayload" "/resource:$ExtensionId,PerRoute.ExtensionId" "/resource:$ProxiFyreSetup,PerRoute.ProxiFyreSetup" "/resource:$VisualCppRuntime,PerRoute.VisualCppRuntime" "/resource:$WindowsPacketFilter,PerRoute.WindowsPacketFilter" "/out:$Installer" $InstallerReferences (Join-Path $ProjectRoot 'installer\WindowsInstaller.cs')
+& $Csc /nologo /target:winexe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\src\main\resources\icons\perroute.ico" "/win32manifest:$GeneratedInstaller\installer.manifest" "/resource:$PortableZip,PerRoute.Payload" "/resource:$BrowserZip,PerRoute.BrowserPayload" "/resource:$ExtensionId,PerRoute.ExtensionId" "/resource:$ProxiFyreSetup,PerRoute.ProxiFyreSetup" "/resource:$VisualCppRuntime,PerRoute.VisualCppRuntime" "/resource:$WindowsPacketFilter,PerRoute.WindowsPacketFilter" "/out:$Installer" $InstallerReferences $ReleaseInfo (Join-Path $ProjectRoot 'installer\WindowsInstaller.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Could not compile the standalone PerRoute installer.' }
 
 Write-Host "Compose application: $PackagedApp\PerRoute.exe" -ForegroundColor Green
