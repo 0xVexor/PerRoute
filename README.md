@@ -6,15 +6,16 @@
 
 **Route only the applications you choose through your proxy. Everything else stays on your regular connection.**
 
-A modern Windows client for VLESS, VMess, Trojan and Shadowsocks, built on [Xray-core](https://github.com/XTLS/Xray-core).
+A Windows and macOS desktop client for VLESS, VMess, Trojan and Shadowsocks, built on [Xray-core](https://github.com/XTLS/Xray-core).
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D6)
+![macOS](https://img.shields.io/badge/macOS-13%2B%20preview-555555)
 ![Version](https://img.shields.io/badge/version-3.6.0-6B57D9)
 ![Built with](https://img.shields.io/badge/built%20with-Kotlin%20%2B%20Compose%20Desktop-7F52FF)
 ![Core](https://img.shields.io/badge/core-Xray-0B9B83)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-[Download](#download) · [What's new](#whats-new-in-351) · [Features](#features) · [Tour](#tour) · [Speed](#speed) · [Build from source](#build-from-source)
+[Download](#download) · [macOS](#macos-version) · [What's new](#whats-new-in-360) · [Features](#features) · [Tour](#tour) · [Speed](#speed) · [Build from source](#build-from-source)
 
 <img src="docs/screenshots/connection.png" width="820" alt="PerRoute connected in Smart per-app mode, one row per route">
 
@@ -30,6 +31,8 @@ When you do want everything proxied, System proxy and Local proxy modes are one 
 
 ## What's new in 3.6.0
 
+Windows release highlights follow. For macOS, see the [desktop preview](#macos-version).
+
 - **Browser extension.** PerRoute now comes to Chrome, Edge, Brave and Vivaldi, with or without the app. Choose site by site what uses the tunnel, opens directly or is blocked, with a server per site, temporary rules, a kill switch, server tests, failover and a request inspector. The installer asks whether you want the app, the extension or both. See [Browser extension](#browser-extension).
 - **Quick Route.** Right-click a program or its shortcut in Explorer and choose **Route with PerRoute** to give it a route without opening Apps (turn it on in *Settings > General*).
 - **LAN Bridge.** Share this computer's connection with a phone, tablet or TV on the same Wi-Fi for an hour, four hours or until you stop (*Tools > LAN Bridge*).
@@ -39,6 +42,8 @@ When you do want everything proxied, System proxy and Local proxy modes are one 
 Full notes: [docs/releases/v3.6.0.md](docs/releases/v3.6.0.md).
 
 ## Features
+
+Windows features are listed below; see [macOS support and limits](#macos-version).
 
 | | |
 |---|---|
@@ -83,7 +88,7 @@ Full notes: [docs/releases/v3.6.0.md](docs/releases/v3.6.0.md).
 
 ## Download
 
-Get the latest build from the [Releases](https://github.com/AliMirzad/PerRoute/releases/latest) page.
+Download installers from [Releases](https://github.com/AliMirzad/PerRoute/releases). macOS downloads will appear there when published.
 
 | Package | Use it when |
 |---|---|
@@ -98,7 +103,45 @@ Verify a download against the SHA-256 values published with each release:
 Get-FileHash .\PerRoute-Setup-3.6.0.exe -Algorithm SHA256
 ```
 
+## macOS version
+
+Requires macOS 13 or newer. Apple Silicon is tested; Intel builds are untested. Both interface styles and light/dark themes are available. Java and the proxy engines are bundled.
+
+| Mode | What it does |
+|---|---|
+| System proxy | Configures macOS HTTP, HTTPS and SOCKS proxies on Connect and restores its changes on Disconnect. Works with apps that follow system proxy settings. |
+| Smart per-app | Routes selected apps, including Chrome helpers, over IPv4 TCP. Unselected apps keep their direct connection. |
+| Local proxy | Provides local SOCKS5 and HTTP proxies for apps you configure manually. |
+
+Per-app limitations: Safari routing is unreliable; UDP/QUIC, IPv6 and a kill switch are unsupported. DNS leak protection and ECH support are not guaranteed. Windows-only tools are hidden or disabled. The browser extension is separate and is not bundled in the DMG.
+
+### Install on macOS
+
+For collaborator testing, use the Apple Silicon `.pkg` Installer package from `build/macos-pkg/`. It installs PerRoute into Applications and registers its matching background helper through the standard macOS Installer under one administrator approval. A macOS installer has not been published to [Releases](https://github.com/AliMirzad/PerRoute/releases) yet.
+
+1. Disconnect and Quit an existing PerRoute instance. Open the `.pkg` and follow Installer's prompts to install on the startup disk. The optional DMG still supports dragging **PerRoute.app** to **Applications** and ejecting the disk.
+2. Open **Applications > PerRoute**.
+3. Import your server and choose a mode. For per-app routing, select the app including helpers in **Apps** and save.
+4. Click **Connect**. The PKG has already installed the helper; approve Keychain access if requested. Click **Disconnect** when finished. The optional DMG still requests helper setup separately on first Connect.
+
+The preview PKG is unsigned and not notarized; the app retains its local certificate signature. Installer and app launch security checks still apply. If macOS offers an override for a trusted download, use **System Settings > Privacy & Security > Open Anyway** after the first attempt. See [Apple's instructions](https://support.apple.com/102445). Changing package format does not fix an unidentified launch failure. If macOS only says the app cannot be opened, report the output of `open /Applications/PerRoute.app` and `/Applications/PerRoute.app/Contents/MacOS/PerRoute`. Always launch the installed copy.
+
+Installer refuses a running PerRoute process, symlink destinations and pending proxy or per-app recovery. It installs the matched helper with the app and confirms the registered service before completing. Compatible upgrades retire the idle previous helper through the signed maintenance tool, then install the bundled helper. A certificate migration is accepted only when the package explicitly carries the original certificate's signed retirement tool and helper. Unknown identities and incomplete installations require recovery with the original app. Package installation does not activate proxy settings or per-app routing. If helper installation fails, Installer reports failure; keep the app for recovery and retry the package. App and helper installation are not an atomic transaction.
+
+
+### Remove or upgrade
+
+Disconnect and Quit. Before deleting the app or replacing it with a differently signed build, remove its helper:
+
+```sh
+/Applications/PerRoute.app/Contents/MacOS/PerRoute --proxy-helper-unregister-interactive
+```
+
+Approve the dialogs and wait for `registered=false` and `pending=false` before removing or replacing the app. Stop if removal fails. Saved configurations and Keychain data are retained.
+
 ## Quick start
+
+For macOS, follow [Install on macOS](#install-on-macos). Windows setup:
 
 1. Open **Servers**, choose **Add servers**, and paste your subscription URL (or use **Paste links** or **QR code**). Review the list, then add it.
 2. Select a server and choose **Use as main server**. Latency appears automatically; the best servers are speed-tested in the background.
@@ -106,6 +149,8 @@ Get-FileHash .\PerRoute-Setup-3.6.0.exe -Algorithm SHA256
 4. Open **Connection** and press **Connect**.
 
 ## Tour
+
+This tour covers Windows; macOS hides unsupported tools.
 
 PerRoute has two designs over the same app. **New** (the default) has a narrow rail with Connect, Apps and Servers, plus Tools (Rules, Profiles, Workspaces, Diagnostics, Health, Traffic) and Settings at the bottom; most pages have a detail panel on the right. **Simple** has a wide menu with every section. Both come in light and dark. Choose under *Settings > General > Interface style*. Switching only redraws the window: it does not disconnect or change any setting. The screenshots below show the New design unless noted.
 
@@ -293,7 +338,7 @@ See [docs/releases/v3.5.0.md](docs/releases/v3.5.0.md) for how each works and it
 
 ## Browser extension
 
-The extension brings PerRoute into Chromium browsers. Where the app routes Windows applications, the extension routes sites, and it works without the app.
+The extension brings PerRoute into Chromium browsers. Where the desktop app routes applications, the extension routes sites, and it works without the app.
 
 - **This site:** the toolbar button shows where the current site goes. One click sends it through the tunnel, directly or nowhere, for good or for 15 minutes to 4 hours, and through the main server or one of its own.
 - **Servers:** subscriptions (with usage, expiry and history), links, Xray JSON and QR codes. Real tests through each server, TCP ping, speed tests, the same quality score as the app, favorites and tags, and a side-by-side comparison with the live route.
@@ -301,9 +346,11 @@ The extension brings PerRoute into Chromium browsers. Where the app routes Windo
 - **Protection:** kill switch, WebRTC protection, automatic failover, and DNS resolved on the server for tunnel sites.
 - **Doctor:** checks the runtime, the server, the live route and the exit address, and shows every host a tab contacts.
 
-To install it, run `PerRoute-Setup-3.6.0.exe` and choose **Browser extension**. The installer puts the runtime in `C:\Program Files\PerRoute Browser`, registers it with your browsers and shows the last step: open the extensions page, turn on Developer mode and choose **Load unpacked** with the `extension` folder. Developer documentation is in [browser/README.md](browser/README.md).
+On Windows, to install it, run `PerRoute-Setup-3.6.0.exe` and choose **Browser extension**. The installer puts the runtime in `C:\Program Files\PerRoute Browser`, registers it with your browsers and shows the last step: open the extensions page, turn on Developer mode and choose **Load unpacked** with the `extension` folder. Developer documentation is in [browser/README.md](browser/README.md).
 
 ## Connection modes
+
+The following describes Windows; see [macOS modes](#macos-version) for Mac behavior.
 
 | Mode | What it routes | Administrator | Notes |
 |---|---|---|---|
@@ -358,6 +405,8 @@ The tunnel health check is stricter in 3.0: a route only passes when an HTTP req
 
 ## Security and privacy
 
+On macOS, Keychain protects the saved-state key and an authenticated helper manages network changes. The platform-specific details below describe Windows.
+
 - **Saved state is encrypted** with AES-256-GCM. The key is wrapped with Windows DPAPI for the signed-in account, so the state file cannot be opened from another Windows account or machine.
 - **No telemetry.** PerRoute talks only to your subscription URLs, your proxy servers, the endpoints used by the tests you start, and the update feed: the official GitHub releases, or the feed you enter. The update check is a plain HTTPS download of the signed manifest.
 - **Traffic history is local** and stores byte totals only, never destinations.
@@ -378,6 +427,24 @@ The tunnel health check is stricter in 3.0: a route only passes when an HTTP req
 | One route's server stops answering | Only the applications on that route are affected; they wait instead of falling back to the direct route. With route monitoring on, the route is retried with growing delays, rebuilt in place, and re-checked every two minutes until it answers; Auto apps move to another working server. |
 
 ## Build from source
+
+### Build the macOS installer
+
+Requires a Mac of the target architecture, JDK 21 selected through `JAVA_HOME`, Python 3 and Xcode Command Line Tools. The first build downloads dependencies.
+
+```sh
+sh gradlew --no-daemon packageMacosPkg
+cd build/macos-pkg
+shasum -a 256 -c SHA256SUMS
+```
+
+The PKG, checksums, installation instructions and build metadata are in `build/macos-pkg/`. Packaging extracts the actual PKG and compares app contents, executable bits, symlink targets and signatures against the sealed source app. It does not install or launch the app. Installer uses a fixed Applications destination and replaces a compatible existing bundle rather than leaving obsolete files behind. macOS 13 and the package architecture are required.
+
+For an explicit certificate migration, pass the original signed retirement payload directory as `-PpreviousMacosHelperRecovery=/absolute/path/to/recovery` when building the PKG. It must contain `Contents/MacOS/PerRouteHelperInstaller` and `Contents/Library/HelperTools/PerRouteProxyHelper` signed by the original certificate. The package validates and embeds only these two binaries. This option does not recreate a missing signing key or permit an arbitrary helper identity.
+
+The optional drag-to-Applications DMG is still built with `sh gradlew --no-daemon packageMacosDmg` into `build/macos-installer/`. See the generated `MAINTENANCE.txt` for signing and upgrade details. Reuse the local signing identity for compatible helper upgrades; keep its private key private. Builds refuse to generate a new identity while installed software exists and signing state is missing. Both formats still require downloaded-install and first-launch testing on another Mac.
+
+### Build on Windows
 
 **Prerequisites**
 

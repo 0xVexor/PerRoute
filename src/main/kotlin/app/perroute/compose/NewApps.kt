@@ -1,5 +1,12 @@
 package app.perroute.compose
 
+import app.perroute.model.ApplicationIdentity
+
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,8 +65,8 @@ internal fun NewAppsPage(shell: Shell) {
             if (locked) Text("  ·  Routes can be edited while disconnected.", color = Amber, fontSize = 13.sp)
             else if (dirty) Text("  ·  Unsaved changes", color = Amber, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
-            if (LocalCompact.current) IconAction(Icons.Rounded.FolderOpen, "Browse for an EXE", size = 40.dp, enabled = !locked) { model.browseExe() }
-            else SecondaryButton("Browse for an EXE", icon = Icons.Rounded.FolderOpen, enabled = !locked) { model.browseExe() }
+            if (LocalCompact.current) IconAction(Icons.Rounded.FolderOpen, "Browse for an application", size = 40.dp, enabled = !locked) { model.browseExe() }
+            else SecondaryButton("Browse for an application", icon = Icons.Rounded.FolderOpen, enabled = !locked) { model.browseExe() }
             SecondaryButton("Cancel", enabled = dirty) { shell.discardDraft() }
             PrimaryButton("Save changes", enabled = dirty && !locked, busy = shell.busy) { shell.saveDraft() }
         }
@@ -110,14 +117,14 @@ internal fun NewAppsPage(shell: Shell) {
                 when {
                     model.loading -> LoadingState("Looking for applications…", Modifier.fillMaxSize())
                     apps.isEmpty() && model.query.isNotBlank() -> EmptyState(Icons.Rounded.SearchOff, "No applications match \"${model.query}\"",
-                        "Try another name, switch between installed and running apps, or browse for the EXE.", Modifier.fillMaxSize()) {
+                        "Try another name, switch between installed and running apps, or browse for the executable.", Modifier.fillMaxSize()) {
                         SecondaryButton("Clear search") { model.query = "" }
                     }
                     apps.isEmpty() -> EmptyState(Icons.Rounded.Apps, "No applications found",
-                        if (model.source == AppListSource.RUNNING) "Start the application first, or pick it from installed apps." else "Browse for the EXE to add an application manually.",
+                        if (model.source == AppListSource.RUNNING) "Start the application first, or pick it from installed apps." else "Browse for the executable to add an application manually.",
                         Modifier.fillMaxSize()) { SecondaryButton("Refresh", icon = Icons.Rounded.Refresh) { model.refresh(true) } }
                     else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                        items(apps, key = { it.path.lowercase() }) { app -> NewAppRow(shell, model, app) }
+                        items(apps, key = { ApplicationIdentity.comparisonKey(it.path) }) { app -> NewAppRow(shell, model, app) }
                     }
                 }
             }
@@ -129,7 +136,7 @@ internal fun NewAppsPage(shell: Shell) {
 private fun NewAppRow(shell: Shell, model: AppsModel, app: AppChoice) {
     val draft = shell.draft
     val selected = draft.isSelected(app.path)
-    val focused = draft.focused?.equals(app.path, true) == true
+    val focused = ApplicationIdentity.same(draft.focused, app.path)
     val locked = shell.locked
     val cell = routeCellText(shell, app.path)
     NewTableRow(focused, onClick = { model.focus(app.path) }, label = "Configure ${app.title}") {
@@ -212,11 +219,11 @@ private fun ColumnScope.NewAppPanel(shell: Shell, path: String) {
         NewPanelSection("Current decision") { DecisionSummary(shell, path) }
     }
     NewPanelSection { BandwidthEditor(shell, path) }
-    if (shell.apps.any { it.equals(path, true) }) NewPanelSection("For a while") { TemporaryAppAction(shell, path) }
+    if (shell.apps.any { ApplicationIdentity.same(it, path) }) NewPanelSection("For a while") { TemporaryAppAction(shell, path) }
     if (selected) {
         Spacer(Modifier.height(16.dp))
         LinkAction("Remove from selection", arrow = false, enabled = !locked, color = Red, fontSize = 12.5.sp) {
-            draft.selected.removeAll { it.equals(path, true) }; draft.focused = null
+            draft.selected.removeAll { ApplicationIdentity.same(it, path) }; draft.focused = null
         }
     }
     if (locked) { Spacer(Modifier.height(14.dp)); NewLockNote("Route modes change while disconnected. Limits apply right away.") }

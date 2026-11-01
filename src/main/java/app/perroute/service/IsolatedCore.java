@@ -41,14 +41,14 @@ public final class IsolatedCore implements AutoCloseable {
     }
 
     public static IsolatedCore start(String configJson, int socksPort, Consumer<String> onLine) throws IOException {
-        Path executable = AppDirectories.coreDirectory().resolve("xray.exe");
-        if (!Files.isRegularFile(executable)) throw new IOException("Xray is not installed");
+        XrayRuntime runtime = XrayRuntime.current();
+        Path executable = runtime.requireExecutable(false);
         Path config = AppDirectories.dataDirectory().resolve("probes").resolve("isolated-" + UUID.randomUUID() + ".json");
         Files.createDirectories(config.getParent());
         Files.writeString(config, configJson, StandardCharsets.UTF_8);
         try {
             Process process = new ProcessBuilder(executable.toString(), "run", "-config", config.toString())
-                    .directory(AppDirectories.coreDirectory().toFile()).redirectErrorStream(true).start();
+                    .directory(runtime.directory().toFile()).redirectErrorStream(true).start();
             return new IsolatedCore(process, config, socksPort, onLine);
         } catch (IOException | RuntimeException error) {
             Files.deleteIfExists(config);

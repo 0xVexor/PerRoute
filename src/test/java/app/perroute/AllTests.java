@@ -79,6 +79,9 @@ public final class AllTests {
         run("Embedded profile with custom servers", AllTests::testProfileWithCustomServers);
         run("Embedded profile as a custom server", AllTests::testEmbeddedProfileAsCustomServer);
         run("Traffic report", AllTests::testTrafficReport);
+        PlatformBoundaryTests.runPlatformSelection();
+        PlatformBoundaryTests.runDiagnosticRouting();
+        PlatformBoundaryTests.runGatewayAdapter();
         V3DomainTests.runAll();
         ControllerTests.runAll();
         V3ControllerTests.runAll();
@@ -86,7 +89,7 @@ public final class AllTests {
         V35Tests.runAll();
         AppFeatureTests.runAll();
         RealCoreIntegrationTests.runAll();
-        System.out.println("All tests passed (" + (assertions + V3DomainTests.assertions() + ControllerTests.assertions() + V3ControllerTests.assertions() + UiStyleSwitchTests.assertions()
+        System.out.println("All tests passed (" + (assertions + PlatformBoundaryTests.assertions() + V3DomainTests.assertions() + ControllerTests.assertions() + V3ControllerTests.assertions() + UiStyleSwitchTests.assertions()
                 + V35Tests.assertions() + AppFeatureTests.assertions() + RealCoreIntegrationTests.assertions()) + " assertions)");
         System.exit(0);
     }

@@ -1,0 +1,43 @@
+// !$*UTF8*$!
+{
+archiveVersion = 1;
+classes = {};
+objectVersion = 56;
+objects = {
+000000000000000000000001 = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Bridge/ExtensionBridge.m"; sourceTree = "<group>"; };
+000000000000000000000002 = { isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "Extension/main.m"; sourceTree = "<group>"; };
+000000000000000000000003 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Extension/Info.plist"; sourceTree = "<group>"; };
+000000000000000000000004 = { isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Extension/Extension.entitlements"; sourceTree = "<group>"; };
+000000000000000000000005 = { isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Host.entitlements"; sourceTree = "<group>"; };
+000000000000000000000006 = { isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = "System/Library/Frameworks/Foundation.framework"; sourceTree = SDKROOT; };
+000000000000000000000007 = { isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = "System/Library/Frameworks/SystemExtensions.framework"; sourceTree = SDKROOT; };
+000000000000000000000008 = { isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = "System/Library/Frameworks/NetworkExtension.framework"; sourceTree = SDKROOT; };
+000000000000000000000009 = { isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; path = "libPerRouteExtensionBridge.dylib"; sourceTree = BUILT_PRODUCTS_DIR; };
+00000000000000000000000A = { isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; path = "app.perroute.spike.transparent-proxy.systemextension"; sourceTree = BUILT_PRODUCTS_DIR; };
+00000000000000000000000B = { isa = PBXGroup; children = (000000000000000000000009, 00000000000000000000000A); name = Products; sourceTree = "<group>"; };
+00000000000000000000000C = { isa = PBXGroup; children = (000000000000000000000001, 000000000000000000000002, 000000000000000000000003, 000000000000000000000004, 000000000000000000000005, 000000000000000000000006, 000000000000000000000007, 000000000000000000000008, 00000000000000000000000B); sourceTree = "<group>"; };
+00000000000000000000000D = { isa = XCBuildConfiguration; buildSettings = {SDKROOT = "macosx"; MACOSX_DEPLOYMENT_TARGET = "12.0"; CLANG_ENABLE_OBJC_ARC = "YES"; CLANG_ENABLE_MODULES = "YES"; GCC_TREAT_WARNINGS_AS_ERRORS = "YES"; ENABLE_HARDENED_RUNTIME = "YES"; GCC_OPTIMIZATION_LEVEL = "0";}; name = Debug; };
+00000000000000000000000E = { isa = XCBuildConfiguration; buildSettings = {SDKROOT = "macosx"; MACOSX_DEPLOYMENT_TARGET = "12.0"; CLANG_ENABLE_OBJC_ARC = "YES"; CLANG_ENABLE_MODULES = "YES"; GCC_TREAT_WARNINGS_AS_ERRORS = "YES"; ENABLE_HARDENED_RUNTIME = "YES"; GCC_OPTIMIZATION_LEVEL = "s";}; name = Release; };
+00000000000000000000000F = { isa = XCConfigurationList; buildConfigurations = (00000000000000000000000D, 00000000000000000000000E); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000010 = { isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "PerRouteExtensionBridge"; EXECUTABLE_PREFIX = "lib"; LD_DYLIB_INSTALL_NAME = "@rpath/libPerRouteExtensionBridge.dylib"; SKIP_INSTALL = "YES"; GCC_OPTIMIZATION_LEVEL = "0";}; name = Debug; };
+000000000000000000000011 = { isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "PerRouteExtensionBridge"; EXECUTABLE_PREFIX = "lib"; LD_DYLIB_INSTALL_NAME = "@rpath/libPerRouteExtensionBridge.dylib"; SKIP_INSTALL = "YES"; GCC_OPTIMIZATION_LEVEL = "s";}; name = Release; };
+000000000000000000000012 = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000010, 000000000000000000000011); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000013 = { isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "$(PRODUCT_BUNDLE_IDENTIFIER)"; EXECUTABLE_NAME = "PerRouteSpikeExtension"; PRODUCT_BUNDLE_IDENTIFIER = "app.perroute.spike.transparent-proxy"; INFOPLIST_FILE = "Extension/Info.plist"; CODE_SIGN_ENTITLEMENTS = "Extension/Extension.entitlements"; GENERATE_INFOPLIST_FILE = "NO"; CODE_SIGN_STYLE = "Manual"; CODE_SIGN_IDENTITY = "Developer ID Application"; SKIP_INSTALL = "YES"; GCC_OPTIMIZATION_LEVEL = "0";}; name = Debug; };
+000000000000000000000014 = { isa = XCBuildConfiguration; buildSettings = {PRODUCT_NAME = "$(PRODUCT_BUNDLE_IDENTIFIER)"; EXECUTABLE_NAME = "PerRouteSpikeExtension"; PRODUCT_BUNDLE_IDENTIFIER = "app.perroute.spike.transparent-proxy"; INFOPLIST_FILE = "Extension/Info.plist"; CODE_SIGN_ENTITLEMENTS = "Extension/Extension.entitlements"; GENERATE_INFOPLIST_FILE = "NO"; CODE_SIGN_STYLE = "Manual"; CODE_SIGN_IDENTITY = "Developer ID Application"; SKIP_INSTALL = "YES"; GCC_OPTIMIZATION_LEVEL = "s";}; name = Release; };
+000000000000000000000015 = { isa = XCConfigurationList; buildConfigurations = (000000000000000000000013, 000000000000000000000014); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+000000000000000000000016 = { isa = PBXBuildFile; fileRef = 000000000000000000000001; };
+000000000000000000000017 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000016); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000018 = { isa = PBXBuildFile; fileRef = 000000000000000000000006; };
+000000000000000000000019 = { isa = PBXBuildFile; fileRef = 000000000000000000000007; };
+00000000000000000000001A = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000018, 000000000000000000000019); runOnlyForDeploymentPostprocessing = 0; };
+00000000000000000000001B = { isa = PBXBuildFile; fileRef = 000000000000000000000002; };
+00000000000000000000001C = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000001B); runOnlyForDeploymentPostprocessing = 0; };
+00000000000000000000001D = { isa = PBXBuildFile; fileRef = 000000000000000000000006; };
+00000000000000000000001E = { isa = PBXBuildFile; fileRef = 000000000000000000000008; };
+00000000000000000000001F = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000001D, 00000000000000000000001E); runOnlyForDeploymentPostprocessing = 0; };
+000000000000000000000020 = { isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000012; buildPhases = (000000000000000000000017, 00000000000000000000001A); buildRules = (); dependencies = (); name = PerRouteExtensionBridge; productName = PerRouteExtensionBridge; productReference = 000000000000000000000009; productType = "com.apple.product-type.library.dynamic"; };
+000000000000000000000021 = { isa = PBXNativeTarget; buildConfigurationList = 000000000000000000000015; buildPhases = (00000000000000000000001C, 00000000000000000000001F); buildRules = (); dependencies = (); name = PerRouteSpikeExtension; productName = PerRouteSpikeExtension; productReference = 00000000000000000000000A; productType = "com.apple.product-type.system-extension"; };
+000000000000000000000022 = { isa = PBXProject; attributes = { LastUpgradeCheck = 2600; }; buildConfigurationList = 00000000000000000000000F; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base); mainGroup = 00000000000000000000000C; productRefGroup = 00000000000000000000000B; projectDirPath = ""; projectRoot = ""; targets = (000000000000000000000020, 000000000000000000000021); };
+};
+rootObject = 000000000000000000000022;
+}

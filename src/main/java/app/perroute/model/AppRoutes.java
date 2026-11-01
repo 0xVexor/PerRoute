@@ -8,8 +8,13 @@ import java.util.Map;
 public final class AppRoutes {
     private AppRoutes() {}
 
+    /** Legacy Windows normalization is unchanged; tagged macOS identities remain exact on every host. */
     public static String normalize(String applicationPath) {
         if (applicationPath == null || applicationPath.isBlank()) return "";
+        if (ApplicationIdentity.isMac(applicationPath)) {
+            String path = ApplicationIdentity.path(applicationPath);
+            return ApplicationIdentity.isMacFamily(applicationPath) ? ApplicationIdentity.macAppFamily(path) : ApplicationIdentity.macExecutable(path);
+        }
         String text = applicationPath.trim();
         try { text = Path.of(text).toAbsolutePath().normalize().toString(); }
         catch (RuntimeException ignored) { }

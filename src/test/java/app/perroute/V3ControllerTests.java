@@ -1,15 +1,15 @@
 package app.perroute;
 
 import app.perroute.backup.BackupService;
-import app.perroute.compose.ActionResult;
-import app.perroute.compose.ActiveRoute;
-import app.perroute.compose.BandwidthState;
-import app.perroute.compose.InspectorRow;
-import app.perroute.compose.PerRouteController;
-import app.perroute.compose.RestoreRequest;
-import app.perroute.compose.RouteCheckState;
-import app.perroute.compose.RouteHealthView;
-import app.perroute.compose.RouteKind;
+import app.perroute.compose.controller.ActionResult;
+import app.perroute.compose.controller.ActiveRoute;
+import app.perroute.compose.controller.BandwidthState;
+import app.perroute.compose.inspector.InspectorRow;
+import app.perroute.compose.controller.PerRouteController;
+import app.perroute.compose.controller.RestoreRequest;
+import app.perroute.compose.controller.RouteCheckState;
+import app.perroute.compose.controller.RouteHealthView;
+import app.perroute.compose.inspector.RouteKind;
 import app.perroute.gateway.AppGateway;
 import app.perroute.model.AppRoutes;
 import app.perroute.model.AppState;
@@ -418,7 +418,7 @@ final class V3ControllerTests {
         var status = f.controller.bandwidthStatus(f.telegram);
         equal(BandwidthState.NOT_ENFORCED, status.getState());
         check(status.getDetail().contains("gateway is off"), status.getDetail());
-        waitFor(() -> f.controller.routeChecks().getOrDefault("main", new app.perroute.compose.RouteCheck()).getState() == RouteCheckState.PASSED);
+        waitFor(() -> f.controller.routeChecks().getOrDefault("main", new app.perroute.compose.controller.RouteCheck()).getState() == RouteCheckState.PASSED);
         f.backend.failingPorts.add(app.perroute.service.AppProxyLauncher.SOCKS_PORT);
         Thread.sleep(600);
         equal(RouteCheckState.PASSED, f.controller.routeChecks().get("main").getState());
@@ -430,7 +430,7 @@ final class V3ControllerTests {
         check(!f.controller.setTrafficGateway(false).getOk(), "The gateway cannot be switched while connected");
     }
 
-    private static void testKillSwitch(Fixture f) {
+    private static void testKillSwitch(Fixture f) throws Exception {
         f.controller.setKillSwitch(true);
         int restores = f.backend.restorePerAppCount;
         check(f.controller.connect().getOk(), "Connect");
@@ -440,6 +440,7 @@ final class V3ControllerTests {
         check(!f.backend.gatewayRunning, "The gateway is stopped; the held apps have nowhere to go");
         check(f.controller.connect().getOk(), "Reconnect");
         f.backend.crash();
+        waitFor(() -> !f.backend.gatewayRunning && !f.controller.isConnected());
         check(!f.backend.gatewayRunning, "A core crash stops the gateway too");
         equal(restores, f.backend.restorePerAppCount);
         check(!f.controller.isConnected(), "The crash is noticed");
@@ -579,7 +580,7 @@ final class V3ControllerTests {
         Files.writeString(installed, "test");
         String saved = f.directory.resolve("WindowsApps").resolve("Example.Chat_1.0.0.0_x64__pub0example01").resolve("app").resolve("Chat.exe").toString();
         check(f.controller.saveApplicationSetup(List.of(f.chrome, saved), Map.of(), false).getOk(), "Save the selection");
-        f.backend.installed = List.of(new app.perroute.service.InstalledApplicationDiscovery.InstalledApplication("Chat", installed.toString()));
+        f.backend.installed = List.of(new app.perroute.backend.api.ApplicationDescriptor("Chat", installed.toString()));
         check(f.controller.connect().getOk(), "Connect");
         check(f.backend.perAppApplications.contains(installed.toString()), "The engine routes the installed version: " + f.backend.perAppApplications);
         check(!f.backend.perAppApplications.contains(saved), "The old folder is not given to the engine");

@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -78,6 +83,10 @@ internal fun healthModel(shell: Shell): HealthModel = shell.screen("${Tab.Health
 
 @Composable
 internal fun HealthPage(shell: Shell) {
+    if (!shell.controller.capabilities().networkRecovery()) {
+        UnavailableFeature("Connection doctor and safety checks", "Use connection status and route checks. These reports do not verify macOS protection yet.")
+        return
+    }
     val model = healthModel(shell)
     FeaturePage(listOf("Tools", "Health"), "Health", "Find out why something does not connect, and check that protection works.",
         actions = { PrimaryButton(if (model.running) "Checking…" else if (model.tab == HealthTab.Doctor) "Diagnose" else "Run safety checks",

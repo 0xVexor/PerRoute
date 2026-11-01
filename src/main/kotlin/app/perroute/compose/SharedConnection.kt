@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -89,7 +94,7 @@ internal fun modeLabel(mode: ConnectionMode): String = when (mode) {
 internal fun modeDetail(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.NATIVE_PER_APP -> "Only selected apps use the proxy."
     ConnectionMode.BROWSER_PROXY -> "Apps you point at the local proxy use it."
-    ConnectionMode.SYSTEM_PROXY -> "Apps that follow Windows proxy settings use it."
+    ConnectionMode.SYSTEM_PROXY -> "Apps that follow system proxy settings use it."
     ConnectionMode.TUN_COMPATIBILITY -> "Network traffic goes through the compatibility tunnel."
 }
 

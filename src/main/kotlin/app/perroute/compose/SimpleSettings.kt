@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -125,11 +130,13 @@ private fun SimpleGeneral(shell: Shell) {
     SimpleSettingRow("Interface style", "Simple or New. Only the look changes: your connection, routes, settings and unsaved changes stay as they are.") {
         Segmented(listOf(UiStyle.SIMPLE, UiStyle.NEW), Appearance.style, { it.label }, Modifier.width(300.dp), height = 48.dp) { shell.setUiStyle(it) }
     }
-    val explorer = explorerMenuModel(shell)
-    SimpleSettingRow("Route with PerRoute in Explorer", ExplorerMenuDetail, note = if (explorer.available) "" else "Available in the installed or portable PerRoute.") {
-        ToggleSwitch(explorer.enabled, "Route with PerRoute in Explorer", enabled = explorer.available) { explorer.change(it) }
+    if (shell.controller.explorerMenuSupported()) {
+        val explorer = explorerMenuModel(shell)
+        SimpleSettingRow("Route with PerRoute in Explorer", ExplorerMenuDetail, note = if (explorer.available) "" else "Available in the installed or portable PerRoute.") {
+            ToggleSwitch(explorer.enabled, "Route with PerRoute in Explorer", enabled = explorer.available) { explorer.change(it) }
+        }
     }
-    SimpleSettingRow("Window behavior", "Closing or minimizing keeps PerRoute in the tray. Use Quick Access there to connect, switch the main server, or quit.") {
+    SimpleSettingRow("Window behavior", WindowBehaviorDetail) {
         Icon(Icons.Rounded.DesktopWindows, null, tint = White.copy(.8f), modifier = Modifier.size(28.dp))
     }
     Column(Modifier.padding(vertical = 18.dp)) {
@@ -161,7 +168,7 @@ private fun SimpleConnectionSettings(shell: Shell) {
     Spacer(Modifier.height(10.dp))
     Text("Connection mode", color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(8.dp))
-    OfferedModes.forEach { mode ->
+    OfferedModes.filter { shell.controller.capabilities().supports(it) }.forEach { mode ->
         val missing = model.driverMissing(mode)
         val selected = mode == shell.mode
         val shape = RoundedCornerShape(12.dp)
@@ -173,9 +180,9 @@ private fun SimpleConnectionSettings(shell: Shell) {
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(modeTitle(mode), color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(if (missing) "Needs the per-app driver from the Full Installer. See Components." else modeChoiceDetail(mode), color = if (missing) Amber else Muted, fontSize = 13.sp)
+                Text(if (missing) model.missingRoutingDetail else modeChoiceDetail(mode), color = if (missing) Amber else Muted, fontSize = 13.sp)
             }
-            if (mode == ConnectionMode.NATIVE_PER_APP && model.environment != null) Badge(if (missing) "Driver missing" else "Driver installed", if (missing) Amber else Cyan)
+            if (mode == ConnectionMode.NATIVE_PER_APP && model.environment != null) Badge(model.routingStatus(missing), if (missing) Amber else Cyan)
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -234,13 +241,14 @@ private fun SimpleRoutingSettings(shell: Shell) {
         ToggleSwitch(model.monitoring, "Route recovery") { model.changeMonitoring(it) }
     }
     SimpleSettingRow("Traffic gateway", "Enables app limits and detailed traffic. It never reads the contents of connections. Smart per-app only.",
-        note = if (shell.locked) "Disconnect to change." else "Change only while disconnected.") {
+        note = if (shell.controller.gatewayRequired()) "Required for macOS per-app routing." else if (shell.locked) "Disconnect to change." else "Change only while disconnected.") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (shell.locked) { Icon(Icons.Rounded.Lock, null, tint = White.copy(.8f), modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(if (model.gateway) "On" else "Off", color = White, fontSize = 14.sp); Spacer(Modifier.width(12.dp)) }
-            ToggleSwitch(model.gateway, "Traffic gateway", enabled = !shell.locked) { model.changeGateway(it) }
+            ToggleSwitch(model.gateway, "Traffic gateway", enabled = !shell.locked && !shell.controller.gatewayRequired()) { model.changeGateway(it) }
         }
     }
-    SimpleSettingRow("Block QUIC", QuicDetail, note = QuicNote, divider = false) {
+    if (IsMacDesktop) Note("macOS per-app routing handles IPv4 TCP. It does not block UDP or QUIC; a browser may use those connections directly.")
+    else SimpleSettingRow("Block QUIC", QuicDetail, note = QuicNote, divider = false) {
         ToggleSwitch(model.quicBlocked, "Block QUIC") { model.changeQuic(it) }
     }
 }
@@ -255,6 +263,10 @@ private fun SimpleAutomation(shell: Shell) {
 
 @Composable
 private fun SimpleUpdates(shell: Shell) {
+    if (!shell.controller.capabilities().updates()) {
+        UnavailableFeature("Updates", "Install a newer signed app manually.")
+        return
+    }
     val model = settingsModel(shell, SettingsCategory.Updates) { UpdateSettingsModel(shell) }
     UpdateEffects(model)
     SimpleSettingRow(model.headline, "Installed: ${app.perroute.service.SecureUpdateService.CURRENT_VERSION}" + (model.available?.let { "  ·  Available: $it" } ?: "")) {
@@ -287,20 +299,25 @@ private fun SimpleComponents(shell: Shell) {
     if (state == null) { LoadingState("Checking installed components…", Modifier.fillMaxWidth()); return }
     SimpleSettingRow("Xray core", "Connection and protocol engine.") {
         if (state.coreReady) Badge("Installed", Cyan, icon = Icons.Rounded.CheckCircle)
-        else PrimaryButton("Install", icon = Icons.Rounded.Download, enabled = model.canInstall) { model.installCore() }
+        else if (shell.controller.capabilities().coreInstallation()) PrimaryButton("Install", icon = Icons.Rounded.Download, enabled = model.canInstall) { model.installCore() }
+        else Badge("Not bundled", Amber, icon = Icons.Rounded.WarningAmber)
     }
-    SimpleSettingRow("Per-app driver (ProxiFyre)", "Routes applications in Smart per-app mode. The Full Installer sets it up with one Administrator approval.") {
+    SimpleSettingRow(model.routingName, model.routingDetail) {
         Badge(if (state.perAppReady) "Installed" else "Not installed", if (state.perAppReady) Cyan else Amber, icon = if (state.perAppReady) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber)
     }
     if (model.progress.isNotBlank()) Text(model.progress, color = Amber, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
     Spacer(Modifier.height(16.dp))
     SecondaryButton(if (model.loading) "Checking…" else "Check again", icon = Icons.Rounded.Refresh, enabled = !model.loading) { model.reload() }
     Spacer(Modifier.height(14.dp))
-    Note("Smart per-app needs both the core and the per-app driver. Other connection modes use only the core.")
+    Note(model.routingNote)
 }
 
 @Composable
 private fun SimpleBackup(shell: Shell, model: BackupModel) {
+    if (!shell.controller.capabilities().backupRestore()) {
+        UnavailableFeature("Backup and restore", "Portable backup and restore needs platform-aware application mapping.")
+        return
+    }
     Spacer(Modifier.height(8.dp))
     Divider()
     Spacer(Modifier.height(16.dp))
@@ -369,7 +386,7 @@ private fun SimpleBackup(shell: Shell, model: BackupModel) {
 
 @Composable
 private fun SimpleActivityLog(shell: Shell) {
-    Text("The last 200 events of this session, newest first. Select text and press Ctrl+C, or copy everything.", color = Muted, fontSize = 13.sp)
+    Text("The last 200 events of this session, newest first. Select text and press $CopyShortcut, or copy everything.", color = Muted, fontSize = 13.sp)
     Spacer(Modifier.height(12.dp))
     if (shell.logs.isEmpty()) { EmptyState(Icons.Rounded.Description, "Nothing logged yet", "Connection events, test results and parser warnings appear here.", Modifier.fillMaxWidth()); return }
     SelectionContainer {

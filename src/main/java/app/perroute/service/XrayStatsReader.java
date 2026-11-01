@@ -5,7 +5,6 @@ import app.perroute.util.Json;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,15 +12,21 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public final class XrayStatsReader {
+    private final XrayRuntime runtime;
+
+    public XrayStatsReader() { this(XrayRuntime.current()); }
+    public XrayStatsReader(XrayRuntime runtime) {
+        this.runtime = java.util.Objects.requireNonNull(runtime, "runtime");
+    }
+
     @SuppressWarnings("unchecked")
     public Map<String, Long> readInboundCounters() throws IOException, InterruptedException {
-        Path executable = AppDirectories.coreDirectory().resolve("xray.exe");
-        if (!Files.isRegularFile(executable)) throw new IOException("Xray is not installed");
+        Path executable = runtime.requireExecutable(false);
         Process process = new ProcessBuilder(
                 executable.toString(), "api", "statsquery",
                 "--server=127.0.0.1:" + XrayConfigGenerator.STATS_API_PORT,
                 "-pattern", "inbound>>>", "-reset", "false")
-                .directory(AppDirectories.coreDirectory().toFile())
+                .directory(runtime.directory().toFile())
                 .redirectErrorStream(true)
                 .start();
         ByteArrayOutputStream output = new ByteArrayOutputStream();

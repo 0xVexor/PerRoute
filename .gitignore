@@ -83,3 +83,6 @@ $RECYCLE.BIN/
 /browser/extension/node_modules/
 /browser/extension/dist/
 /browser/node_modules/
+
+# Local Python build-tool caches
+__pycache__/

@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.rounded.AltRoute
@@ -42,7 +47,7 @@ internal enum class SettingsCategory(val label: String, val icon: ImageVector, v
     Routing("Routing", Icons.Rounded.AltRoute, "Measure quality and keep individual routes working."),
     Automation("Automation", Icons.Rounded.Sync, "Small automations for a more reliable connection."),
     Updates("Updates", Icons.Rounded.SystemUpdateAlt, "Keep the app current with signed releases."),
-    Components("Components", Icons.Rounded.Inventory2, "The core and driver behind your routes."),
+    Components("Components", Icons.Rounded.Inventory2, "The components behind your routes."),
     Backup("Backup & Restore", Icons.Rounded.Backup, "Keep a copy of your setup."),
     LocalNetwork("Local network", Icons.Rounded.Router, "Printers, NAS and other devices near you."),
     Recovery("Recovery", Icons.Rounded.SettingsBackupRestore, "Undo PerRoute's network changes, or go back a version."),
@@ -58,7 +63,7 @@ internal fun modeTitle(mode: ConnectionMode): String = modeLabel(mode)
 internal fun modeChoiceDetail(mode: ConnectionMode): String = when (mode) {
     ConnectionMode.NATIVE_PER_APP -> "Only selected apps use the proxy."
     ConnectionMode.BROWSER_PROXY -> "Configure the proxy endpoints inside your apps."
-    ConnectionMode.SYSTEM_PROXY -> "Apps using Windows proxy settings."
+    ConnectionMode.SYSTEM_PROXY -> "Apps using the system proxy settings."
     ConnectionMode.TUN_COMPATIBILITY -> "Broad compatibility; requires Administrator."
 }
 
@@ -67,8 +72,14 @@ internal class ConnectionSettingsModel(private val shell: Shell) {
     suspend fun load() {
         environment = withContext(Dispatchers.IO) { runCatching { shell.controller.environment() }.getOrDefault(EnvironmentState(false, false, false)) }
     }
+    val missingRoutingDetail: String get() = if (shell.controller.capabilities().coreInstallation())
+        "Needs the per-app driver from the Full Installer. See Components."
+        else "Needs the matched routing helper and engine. See Components."
+    fun routingStatus(missing: Boolean): String = if (shell.controller.capabilities().coreInstallation())
+        if (missing) "Driver missing" else "Driver installed"
+        else if (missing) "Helper unavailable" else "Helper bundled"
     fun driverMissing(mode: ConnectionMode) = mode == ConnectionMode.NATIVE_PER_APP && environment?.perAppReady == false
-    fun canChoose(mode: ConnectionMode) = !shell.locked && !driverMissing(mode) && !shell.busy
+    fun canChoose(mode: ConnectionMode) = shell.controller.capabilities().supports(mode) && !shell.locked && !driverMissing(mode) && !shell.busy
     fun choose(mode: ConnectionMode) { if (!canChoose(mode)) return; shell.controller.setMode(mode); shell.refresh() }
     fun setAdvanced(enabled: Boolean) {
         val result = shell.controller.setAdvancedRouting(enabled)
@@ -153,7 +164,10 @@ internal class AutomationSettingsModel(private val shell: Shell) {
         Option("Fastest main server on connect", "Measure reachable servers and use the lowest latency as the main server when connecting.", fastestOnConnect) { fastestOnConnect = it; controller.setFastestOnConnect(it) },
         Option("Automatic speed tests", "After pinging, measure the download speed of the 10 best servers (up to 10 MB each).", autoSpeedTest) { autoSpeedTest = it; controller.setAutoSpeedTest(it) },
         Option("Save resources on battery and metered networks", AdaptiveResourcesDetail + resourceNow(), adaptive) { adaptive = it; shell.notify(controller.setAdaptiveResources(it)) }
-    )
+    ).filter { option ->
+        (option.title != "Per-app killswitch" || controller.perAppKillSwitchSupported()) &&
+            (option.title != "Save resources on battery and metered networks" || controller.capabilities().networkRecovery())
+    }
 
     private fun resourceNow(): String {
         val now = controller.resourceConditions()
@@ -253,7 +267,11 @@ internal class ComponentSettingsModel(private val shell: Shell) {
         }
     }
 
-    val canInstall: Boolean get() = !shell.busy && !shell.locked
+    private val mac: Boolean get() = System.getProperty("os.name") == "Mac OS X"
+    val routingName: String get() = if (mac) "Per-app routing helper" else "Per-app driver (ProxiFyre)"
+    val routingDetail: String get() = if (mac) "Routes explicitly selected executable paths. Setup may require administrator approval." else "Required for Smart per-app mode. The Full Installer sets it up with one Administrator approval."
+    val routingNote: String get() = if (mac) "Per-app routing currently supports IPv4 TCP. Safari shared WebKit, UDP and IPv6 need separate support." else "Smart per-app needs both the core and the per-app driver. Other connection modes use only the core."
+    val canInstall: Boolean get() = shell.controller.capabilities().coreInstallation() && !shell.busy && !shell.locked
 }
 
 internal fun confirmReset(shell: Shell) {
@@ -394,3 +412,14 @@ internal class RestoreSession(private val shell: Shell, val request: RestoreRequ
 }
 
 internal fun backupModel(shell: Shell): BackupModel = settingsModel(shell, SettingsCategory.Backup) { BackupModel(shell) }
+
+internal val IsMacDesktop: Boolean get() = app.perroute.platform.bootstrap.PlatformBootstrap.isMac(System.getProperty("os.name"))
+internal val CopyShortcut: String get() = if (IsMacDesktop) "⌘C" else "Ctrl+C"
+internal val WindowBehaviorDetail: String get() = if (IsMacDesktop)
+    "Closing the window keeps PerRoute running. Reopen it from the Dock. Use PerRoute → Quit PerRoute to exit and restore your connection settings."
+    else "Closing or minimizing keeps PerRoute in the notification area. Use Quick Access there to connect, switch the main server, or quit."
+
+@Composable
+internal fun UnavailableFeature(title: String, detail: String) {
+    InfoBanner("$title is not available on this platform yet. $detail")
+}

@@ -4,7 +4,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
 import app.perroute.compose.Appearance
-import app.perroute.compose.PerRouteController
+import app.perroute.compose.controller.PerRouteController
 import app.perroute.compose.PerRouteWindow
 import app.perroute.compose.SettingsCategory
 import app.perroute.compose.Shell

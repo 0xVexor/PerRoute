@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -190,12 +195,14 @@ private fun NewGeneral(shell: Shell) {
             RadioCard("New", "Charcoal, bone and lime, with a detail panel on each page.", Appearance.style == UiStyle.NEW) { shell.setUiStyle(UiStyle.NEW) }
         }
     }
-    val explorer = explorerMenuModel(shell)
-    ToggleBlock("Route with PerRoute in Explorer", ExplorerMenuDetail, explorer.enabled, enabled = explorer.available,
-        note = if (explorer.available) "" else "Available in the installed or portable PerRoute.") { explorer.change(it) }
-    SettingBlock("Window behavior", "Closing or minimizing keeps PerRoute in the tray.") {
+    if (shell.controller.explorerMenuSupported()) {
+        val explorer = explorerMenuModel(shell)
+        ToggleBlock("Route with PerRoute in Explorer", ExplorerMenuDetail, explorer.enabled, enabled = explorer.available,
+            note = if (explorer.available) "" else "Available in the installed or portable PerRoute.") { explorer.change(it) }
+    }
+    SettingBlock("Window behavior", if (IsMacDesktop) "Reopen PerRoute from the Dock." else "Closing or minimizing keeps PerRoute in the tray.") {
         Spacer(Modifier.height(8.dp))
-        Text("When you close the window or minimize PerRoute, the app keeps running in the notification area so your routes remain active. Use Quick Access there to connect, switch the main server, or quit.",
+        Text(WindowBehaviorDetail,
             color = White.copy(.8f), fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.fillMaxWidth(if (LocalCompact.current) 1f else .85f))
     }
     SettingBlock("About", "Version and application information.") {
@@ -228,16 +235,16 @@ private fun NewConnectionSettings(shell: Shell) {
         if (locked) { Spacer(Modifier.height(8.dp)); NewLockNote("Disconnect before changing connection settings.") }
         Spacer(Modifier.height(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OfferedModes.forEach { mode ->
+            OfferedModes.filter { shell.controller.capabilities().supports(it) }.forEach { mode ->
                 val missing = model.driverMissing(mode)
-                RadioCardBody(Modifier.fillMaxWidth(), modeTitle(mode), if (missing) "Needs the per-app driver from the Full Installer. See Components." else modeChoiceDetail(mode),
+                RadioCardBody(Modifier.fillMaxWidth(), modeTitle(mode), if (missing) model.missingRoutingDetail else modeChoiceDetail(mode),
                     mode == shell.mode, model.canChoose(mode), trailing = if (mode == ConnectionMode.NATIVE_PER_APP && model.environment != null) ({
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Divider(Modifier.height(34.dp), vertical = true)
                             Spacer(Modifier.width(16.dp))
                             Icon(if (missing) Icons.Rounded.WarningAmber else Icons.Rounded.CheckCircle, null, tint = if (missing) Amber else Cyan, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(if (missing) "Driver missing" else "Driver installed", color = White.copy(.85f), fontSize = 13.sp)
+                            Text(model.routingStatus(missing), color = White.copy(.85f), fontSize = 13.sp)
                         }
                     }) else null) { model.choose(mode) }
             }
@@ -302,8 +309,9 @@ private fun NewRoutingSettings(shell: Shell) {
     ToggleBlock("Route recovery", "Recover each route independently. Other routes keep running.", model.monitoring,
         note = "Every live route is checked through its own port once a minute. A failing route retries with growing delays (2 to 32 s), is rebuilt in place, and is checked every two minutes after five failures.") { model.changeMonitoring(it) }
     ToggleBlock("Traffic gateway", "Enables per-app bandwidth limits and detailed traffic. It relays each app's connections on this computer and never reads their contents. Smart per-app only.",
-        model.gateway, enabled = !shell.locked, note = if (shell.locked) "Disconnect to change. It sits in the data path." else "Change only while disconnected.") { model.changeGateway(it) }
-    ToggleBlock("Block QUIC", QuicDetail, model.quicBlocked, note = QuicNote) { model.changeQuic(it) }
+        model.gateway, enabled = !shell.locked && !shell.controller.gatewayRequired(), note = if (shell.controller.gatewayRequired()) "Required for macOS per-app routing." else if (shell.locked) "Disconnect to change. It sits in the data path." else "Change only while disconnected.") { model.changeGateway(it) }
+    if (IsMacDesktop) Note("macOS per-app routing handles IPv4 TCP. It does not block UDP or QUIC; a browser may use those connections directly.")
+    else ToggleBlock("Block QUIC", QuicDetail, model.quicBlocked, note = QuicNote) { model.changeQuic(it) }
 }
 
 @Composable
@@ -316,6 +324,10 @@ private fun NewAutomation(shell: Shell) {
 
 @Composable
 private fun NewUpdates(shell: Shell) {
+    if (!shell.controller.capabilities().updates()) {
+        UnavailableFeature("Updates", "Install a newer signed app manually.")
+        return
+    }
     val model = settingsModel(shell, SettingsCategory.Updates) { UpdateSettingsModel(shell) }
     UpdateEffects(model)
     SettingBlock(model.headline, first = true) {
@@ -374,13 +386,13 @@ private fun NewComponents(shell: Shell) {
         if (state == null) LoadingState("Checking installed components…", Modifier.fillMaxWidth())
         else {
             Divider()
-            ComponentRow("Xray core", state.coreReady, "Powers the proxy connections.", if (state.coreReady) null else "Install", model.canInstall, model) { model.installCore() }
+            ComponentRow("Xray core", state.coreReady, "Powers the proxy connections.", if (state.coreReady || !shell.controller.capabilities().coreInstallation()) null else "Install", model.canInstall, model) { model.installCore() }
             Divider()
-            ComponentRow("Per-app driver (ProxiFyre)", state.perAppReady, "Required for Smart per-app mode. The Full Installer sets it up with one Administrator approval.", null, false, model) {}
+            ComponentRow(model.routingName, state.perAppReady, model.routingDetail, null, false, model) {}
         }
         if (model.progress.isNotBlank()) { Spacer(Modifier.height(8.dp)); Text(model.progress, color = Amber, fontSize = 12.5.sp) }
     }
-    Note("Smart per-app needs both the core and the per-app driver. Other connection modes use only the core.")
+    Note(model.routingNote)
 }
 
 @Composable
@@ -403,6 +415,10 @@ private fun ComponentRow(title: String, ready: Boolean, detail: String, action: 
 
 @Composable
 private fun NewBackup(shell: Shell, model: BackupModel) {
+    if (!shell.controller.capabilities().backupRestore()) {
+        UnavailableFeature("Backup and restore", "Portable backup and restore needs platform-aware application mapping.")
+        return
+    }
     SettingBlock("Create a backup", "Select what to include in the backup file.", first = true) {
         Spacer(Modifier.height(10.dp))
         val sections = BackupService.Section.entries
@@ -459,7 +475,7 @@ private fun NewBackup(shell: Shell, model: BackupModel) {
 
 @Composable
 private fun NewActivityLog(shell: Shell) {
-    Text("Up to 200 recent events. Select text and press Ctrl+C, or copy everything.", color = Muted, fontSize = 13.sp)
+    Text("Up to 200 recent events. Select text and press $CopyShortcut, or copy everything.", color = Muted, fontSize = 13.sp)
     Spacer(Modifier.height(12.dp))
     if (shell.logs.isEmpty()) { EmptyState(Icons.Rounded.Description, "Nothing logged yet", "Connection events, test results and parser warnings appear here.", Modifier.fillMaxWidth()); return }
     NewTableHeader {

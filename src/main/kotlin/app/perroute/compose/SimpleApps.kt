@@ -1,5 +1,12 @@
 package app.perroute.compose
 
+import app.perroute.model.ApplicationIdentity
+
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,14 +92,14 @@ internal fun SimpleAppsPage(shell: Shell) {
                 when {
                     model.loading -> LoadingState("Looking for applications…", Modifier.fillMaxSize())
                     apps.isEmpty() && model.query.isNotBlank() -> EmptyState(Icons.Rounded.SearchOff, "No applications match \"${model.query}\"",
-                        "Try another name, switch between installed and running apps, or browse for the EXE.", Modifier.fillMaxSize()) {
+                        "Try another name, switch between installed and running apps, or browse for the executable.", Modifier.fillMaxSize()) {
                         SecondaryButton("Clear search") { model.query = "" }
                     }
                     apps.isEmpty() -> EmptyState(Icons.Rounded.Apps, "No applications found",
-                        if (model.source == AppListSource.RUNNING) "Start the application first, or pick it from installed apps." else "Browse for the EXE to add an application manually.",
+                        if (model.source == AppListSource.RUNNING) "Start the application first, or pick it from installed apps." else "Browse for the executable to add an application manually.",
                         Modifier.fillMaxSize()) { SecondaryButton("Refresh", icon = Icons.Rounded.Refresh) { model.refresh(true) } }
                     else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                        items(apps, key = { it.path.lowercase() }) { app -> SimpleAppRow(shell, model, app) }
+                        items(apps, key = { ApplicationIdentity.comparisonKey(it.path) }) { app -> SimpleAppRow(shell, model, app) }
                     }
                 }
             }
@@ -107,7 +114,7 @@ internal fun SimpleAppsPage(shell: Shell) {
                     StatusDot(Amber, 10.dp); Spacer(Modifier.width(8.dp)); Text("Unsaved changes", color = Amber, fontSize = 14.sp)
                 }
                 Spacer(Modifier.weight(1f))
-                SecondaryButton("Browse for an EXE", enabled = !locked, height = 46.dp) { model.browseExe() }
+                SecondaryButton("Browse for an application", enabled = !locked, height = 46.dp) { model.browseExe() }
                 SecondaryButton("Cancel", enabled = dirty, height = 46.dp) { shell.discardDraft() }
                 PrimaryButton("Save changes", enabled = dirty && !locked, busy = shell.busy, height = 46.dp) { shell.saveDraft() }
             }
@@ -158,7 +165,7 @@ private fun SimpleAppDialog(shell: Shell) {
     val selected = draft.isSelected(path)
     val close = { draft.focused = null; shell.closeDialog() }
     DialogCard(appName(path), path, close, width = 600.dp, actions = {
-        if (selected) SecondaryButton("Remove from selection", enabled = !locked, tint = Red) { draft.selected.removeAll { it.equals(path, true) }; close() }
+        if (selected) SecondaryButton("Remove from selection", enabled = !locked, tint = Red) { draft.selected.removeAll { ApplicationIdentity.same(it, path) }; close() }
         else PrimaryButton("Route this app", enabled = !locked) { draft.toggle(path) }
         PrimaryButton("Done", onClick = close)
     }) {
@@ -189,7 +196,7 @@ private fun SimpleAppDialog(shell: Shell) {
         Divider()
         Spacer(Modifier.height(16.dp))
         BandwidthEditor(shell, path)
-        if (shell.apps.any { it.equals(path, true) }) {
+        if (shell.apps.any { ApplicationIdentity.same(it, path) }) {
             Spacer(Modifier.height(16.dp))
             Divider()
             Spacer(Modifier.height(16.dp))

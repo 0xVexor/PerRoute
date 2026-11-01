@@ -1,5 +1,7 @@
 package app.perroute.backup;
 
+import app.perroute.model.ApplicationIdentity;
+
 import app.perroute.model.AppRoutes;
 import app.perroute.model.AppState;
 import app.perroute.model.BandwidthPolicy;
@@ -204,14 +206,14 @@ public final class BackupService {
         AppState state = copyOfCurrent;
         List<String> summary = new ArrayList<>();
         Map<String, String> normalizedRemap = new HashMap<>();
-        if (remap != null) remap.forEach((from, to) -> normalizedRemap.put(AppRoutes.normalize(from), to == null ? "" : to.trim()));
+        if (remap != null) remap.forEach((from, to) -> normalizedRemap.put(AppRoutes.normalize(from), to == null ? "" : ApplicationIdentity.isMac(to) ? to : to.trim()));
         Set<String> skipped = new LinkedHashSet<>();
         java.util.function.Function<String, String> mapPath = path -> {
             if (path == null || path.isBlank()) return path;
             String key = AppRoutes.normalize(path);
             String target = normalizedRemap.containsKey(key) ? normalizedRemap.get(key) : path;
             if (target.isBlank() || !exists.test(target)) { skipped.add(key); return null; }
-            return Path.of(target).toAbsolutePath().normalize().toString();
+            return ApplicationIdentity.isMac(target) ? AppRoutes.normalize(target) : Path.of(target).toAbsolutePath().normalize().toString();
         };
 
         Map<String, String> keyMap = new HashMap<>();
@@ -282,7 +284,7 @@ public final class BackupService {
             for (String path : payload.applications) {
                 String mapped = mapPath.apply(path);
                 if (mapped == null) continue;
-                if (state.appPaths().stream().noneMatch(existing -> existing.equalsIgnoreCase(mapped))) { state.appPaths().add(mapped); apps++; }
+                if (state.appPaths().stream().noneMatch(existing -> ApplicationIdentity.same(existing, mapped))) { state.appPaths().add(mapped); apps++; }
             }
             payload.routes.forEach((path, key) -> {
                 String mapped = mapPath.apply(path);
@@ -493,12 +495,12 @@ public final class BackupService {
     private static String text(Object value) { return value == null ? "" : String.valueOf(value); }
 
     static String fileName(String path) {
-        try { Path name = Path.of(path).getFileName(); return name == null ? "" : name.toString(); }
+        try { Path name = Path.of(ApplicationIdentity.path(path)).getFileName(); return name == null ? "" : name.toString(); }
         catch (RuntimeException invalid) { return ""; }
     }
 
     public static boolean executableExists(String path) {
-        try { return path != null && !path.isBlank() && Files.isRegularFile(Path.of(path)); }
+        try { return path != null && !path.isBlank() && Files.isRegularFile(Path.of(ApplicationIdentity.path(path))); }
         catch (RuntimeException invalid) { return false; }
     }
 }

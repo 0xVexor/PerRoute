@@ -2,11 +2,11 @@ package app.perroute;
 
 import app.perroute.bridge.BridgeLinks;
 import app.perroute.bridge.BridgeStore;
-import app.perroute.compose.ActionResult;
-import app.perroute.compose.BridgeDeviceView;
-import app.perroute.compose.BridgeView;
-import app.perroute.compose.PerRouteController;
-import app.perroute.compose.QuickRouteTarget;
+import app.perroute.compose.controller.ActionResult;
+import app.perroute.compose.controller.BridgeDeviceView;
+import app.perroute.compose.controller.BridgeView;
+import app.perroute.compose.controller.PerRouteController;
+import app.perroute.compose.controller.QuickRouteTarget;
 import app.perroute.localnet.LocalNetwork;
 import app.perroute.model.AppRoutes;
 import app.perroute.model.AppState;

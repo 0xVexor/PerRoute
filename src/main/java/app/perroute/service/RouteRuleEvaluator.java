@@ -1,6 +1,7 @@
 package app.perroute.service;
 
 import app.perroute.model.RouteRule;
+import app.perroute.model.ApplicationIdentity;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -22,7 +23,7 @@ public final class RouteRuleEvaluator {
     public static Verdict evaluate(List<RouteRule> rules, List<String> applications, String application,
                                    String destination, int port) {
         String target = destination == null ? "" : destination.trim().toLowerCase(Locale.ROOT);
-        String app = application == null ? "" : application.trim();
+        String app = application == null ? "" : ApplicationIdentity.isMac(application) ? application : application.trim();
         byte[] address = literalAddress(target);
         if (address != null && isPrivate(address)) {
             return new Verdict(RouteRule.Action.DIRECT, null, true, "Private and LAN addresses always stay direct.", List.of());
@@ -44,8 +45,8 @@ public final class RouteRuleEvaluator {
     private static boolean appliesTo(RouteRule rule, List<String> applications, String application) {
         if (rule.applicationPath().isBlank()) return true;
         boolean loaded = applications != null
-                && applications.stream().anyMatch(path -> path.equalsIgnoreCase(rule.applicationPath()));
-        return loaded && rule.applicationPath().equalsIgnoreCase(application);
+                && applications.stream().anyMatch(path -> ApplicationIdentity.same(path, rule.applicationPath()));
+        return loaded && ApplicationIdentity.same(rule.applicationPath(), application);
     }
 
     static Match matches(RouteRule rule, String target, byte[] address, int port) {

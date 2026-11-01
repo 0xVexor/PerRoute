@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -108,7 +113,7 @@ internal class DiagnosticsModel(private val shell: Shell) {
         return listOf(direct) + rows.map { row ->
             RouteCheckEntry(row.id, row.node, serverName(row.node),
                 when {
-                    !shell.perApp -> if (shell.mode == ConnectionMode.SYSTEM_PROXY) "Apps that follow Windows proxy settings" else "Apps you point at the local proxy"
+                    !shell.perApp -> if (shell.mode == ConnectionMode.SYSTEM_PROXY) "Apps that follow system proxy settings" else "Apps you point at the local proxy"
                     row.applications.isEmpty() -> "No selected app uses this server"
                     else -> joinNames(row.applications.map(::appName), 4)
                 },
@@ -141,7 +146,7 @@ internal class DiagnosticsModel(private val shell: Shell) {
     }
 
     fun dnsExplanation(): String = when (shell.mode) {
-        ConnectionMode.NATIVE_PER_APP -> "In Smart per-app mode selected apps usually ask Windows for names first, so lookups use the resolvers above and only the connection itself is tunnelled. PerRoute does not measure DNS separately for each server."
+        ConnectionMode.NATIVE_PER_APP -> "In Smart per-app mode selected apps usually ask the operating system for names first, so lookups use the resolvers above and only the connection itself is tunnelled. PerRoute does not measure DNS separately for each server."
         ConnectionMode.TUN_COMPATIBILITY -> "In TUN mode DNS is carried inside the tunnel. PerRoute does not measure DNS separately for each server."
         else -> "Apps using the HTTP proxy hand names to the server; SOCKS clients may still resolve locally first. PerRoute does not measure DNS separately for each server."
     }

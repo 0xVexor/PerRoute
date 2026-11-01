@@ -18,7 +18,9 @@ public record RouteRule(
     public RouteRule {
         id = id == null || id.isBlank() ? UUID.randomUUID().toString() : id;
         name = Objects.requireNonNullElse(name, "Rule").trim();
-        applicationPath = Objects.requireNonNullElse(applicationPath, "").trim();
+        applicationPath = Objects.requireNonNullElse(applicationPath, "");
+        if (ApplicationIdentity.isMac(applicationPath)) ApplicationIdentity.path(applicationPath);
+        else applicationPath = applicationPath.trim();
         matchType = Objects.requireNonNullElse(matchType, MatchType.DOMAIN);
         value = Objects.requireNonNullElse(value, "").trim();
         if (matchType == MatchType.DOMAIN) value = DomainEntries.normalizeList(value);

@@ -1,12 +1,12 @@
 package app.perroute;
 
-import app.perroute.compose.ActiveRoute;
-import app.perroute.compose.ConnectionBackend;
-import app.perroute.compose.InspectorRow;
-import app.perroute.compose.PerRouteController;
-import app.perroute.compose.RouteKind;
-import app.perroute.compose.RouteReport;
-import app.perroute.compose.SystemConnectionBackend;
+import app.perroute.compose.controller.ActiveRoute;
+import app.perroute.backend.api.ConnectionBackend;
+import app.perroute.compose.inspector.InspectorRow;
+import app.perroute.compose.controller.PerRouteController;
+import app.perroute.compose.inspector.RouteKind;
+import app.perroute.backend.api.RouteObservation;
+import app.perroute.platform.windows.WindowsConnectionBackend;
 import app.perroute.gateway.AppGateway;
 import app.perroute.gateway.GatewayConnection;
 import app.perroute.model.AppRoutes;
@@ -62,7 +62,7 @@ final class RealCoreIntegrationTests {
         new RealCoreIntegrationTests().scenario(xray);
     }
 
-    private static final class LocalServer implements AutoCloseable {
+    static final class LocalServer implements AutoCloseable {
         final String name;
         final String uuid = UUID.randomUUID().toString();
         final ServerSocket http;
@@ -146,14 +146,21 @@ final class RealCoreIntegrationTests {
     }
 
     private static final class LoopbackBackend implements ConnectionBackend {
-        final SystemConnectionBackend real = new SystemConnectionBackend();
+        @Override public app.perroute.backend.api.BackendCapabilities capabilities() { return app.perroute.backend.api.BackendCapabilities.windows(); }
+        @Override public void installCore(java.util.function.Consumer<String> progress) { throw new UnsupportedOperationException("Fixture"); }
+        @Override public void installPerApp(java.util.function.Consumer<String> progress) { throw new UnsupportedOperationException("Fixture"); }
+        @Override public app.perroute.backend.api.UpdateDescriptor checkForUpdate(String feed) { throw new UnsupportedOperationException("Fixture"); }
+        @Override public java.nio.file.Path downloadUpdate(app.perroute.backend.api.UpdateDescriptor update, java.util.function.Consumer<Integer> progress) { throw new UnsupportedOperationException("Fixture"); }
+        @Override public void launchUpdate(java.nio.file.Path installer) { throw new UnsupportedOperationException("Fixture"); }
+
+        final WindowsConnectionBackend real = new WindowsConnectionBackend(app.perroute.service.AppDirectories.dataDirectory());
         volatile int starts;
 
         @Override public boolean coreReady() { return true; }
         @Override public boolean perAppReady() { return true; }
         @Override public boolean elevated() { return false; }
-        @Override public void validate(String config, boolean tun) { real.validate(config, tun); }
-        @Override public void start(String config, boolean tun) { starts++; real.start(config, tun); }
+        @Override public void validate(String config, boolean tun) throws Exception { real.validate(config, tun); }
+        @Override public void start(String config, boolean tun) throws Exception { starts++; real.start(config, tun); }
         @Override public void stop() { real.stop(); }
         @Override public boolean isRunning() { return real.isRunning(); }
         @Override public void stopOrphan() { }
@@ -164,19 +171,19 @@ final class RealCoreIntegrationTests {
         @Override public void stopPerAppSidecar() { }
         @Override public void applySystemProxy() { }
         @Override public void restoreSystemProxy() { }
-        @Override public ProxyHealthCheck.Result checkTunnel(int socksPort) { return real.checkTunnel(socksPort); }
-        @Override public Map<String, Long> readInboundCounters() { return real.readInboundCounters(); }
-        @Override public RouteReport lookupPublicAddress(Integer socksPort) { return new RouteReport(null, null, "not used"); }
+        @Override public app.perroute.backend.api.TunnelStatus checkTunnel(int socksPort) { return real.checkTunnel(socksPort); }
+        @Override public Map<String, Long> readInboundCounters() throws Exception { return real.readInboundCounters(); }
+        @Override public RouteObservation lookupPublicAddress(Integer socksPort) { return new RouteObservation(null, null, "not used"); }
         @Override public List<String> systemDnsServers() { return List.of(); }
         @Override public String publicResolver() { return null; }
-        @Override public List<InstalledApplicationDiscovery.InstalledApplication> installedApplications() { return List.of(); }
-        @Override public List<ProcessDiscovery.RunningApplication> runningApplications() { return List.of(); }
-        @Override public void applyRuntimeChange(XrayConfigGenerator.RuntimeChange change, String newTag, String oldTag, String config) {
+        @Override public List<app.perroute.backend.api.ApplicationDescriptor> installedApplications() { return List.of(); }
+        @Override public List<app.perroute.backend.api.ApplicationDescriptor> runningApplications() { return List.of(); }
+        @Override public void applyRuntimeChange(XrayConfigGenerator.RuntimeChange change, String newTag, String oldTag, String config) throws Exception {
             real.applyRuntimeChange(change, newTag, oldTag, config);
         }
-        @Override public void applyRuntimePlan(XrayConfigGenerator.RuntimePlan plan) { real.applyRuntimePlan(plan); }
-        @Override public app.perroute.compose.IsolatedTunnel startIsolatedCore(String config, int socksPort) { return real.startIsolatedCore(config, socksPort); }
-        @Override public void startGateway(List<AppGateway.Route> routes) { real.startGateway(routes); }
+        @Override public void applyRuntimePlan(XrayConfigGenerator.RuntimePlan plan) throws Exception { real.applyRuntimePlan(plan); }
+        @Override public app.perroute.backend.api.IsolatedTunnel startIsolatedCore(String config, int socksPort) { return real.startIsolatedCore(config, socksPort); }
+        @Override public void startGateway(List<AppGateway.Route> routes) throws Exception { real.startGateway(routes); }
         @Override public void stopGateway() { real.stopGateway(); }
         @Override public void setGatewayLimits(String path, long down, long up) { real.setGatewayLimits(path, down, up); }
         @Override public Map<String, AppGateway.Counters> gatewayCounters() { return real.gatewayCounters(); }

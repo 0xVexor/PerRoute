@@ -1,5 +1,7 @@
 package app.perroute.service;
 
+import app.perroute.model.ApplicationIdentity;
+
 import app.perroute.model.Protocol;
 import app.perroute.model.ProxyNode;
 import app.perroute.model.RoutingMode;
@@ -404,7 +406,15 @@ public final class XrayConfigGenerator {
             app.put("protocol", "socks");
             app.put("tag", perAppTag(index));
             app.put("settings", Map.of("udp", true));
-            app.put("sniffing", sniffing);
+            if (ApplicationIdentity.isMac(applicationPaths.get(index))) {
+                // Transparent capture supplies a locally resolved IP. Preserve the HTTP/TLS hostname
+                // for the proxy server instead of requiring that local DNS result to be trustworthy.
+                Map<String, Object> transparentSniffing = new LinkedHashMap<>(sniffing);
+                transparentSniffing.put("routeOnly", false);
+                app.put("sniffing", transparentSniffing);
+            } else {
+                app.put("sniffing", sniffing);
+            }
             inbounds.add(app);
         }
         for (int index = 0; index < customRoutes; index++) {
@@ -843,7 +853,7 @@ public final class XrayConfigGenerator {
             if (rule.applicationPath().isBlank()) inboundTags.addAll(proxyInboundTags(applications));
             else {
                 for (int i = 0; i < applications.size(); i++) {
-                    if (applications.get(i).equalsIgnoreCase(rule.applicationPath())) inboundTags.add(perAppTag(i));
+                    if (ApplicationIdentity.same(applications.get(i), rule.applicationPath())) inboundTags.add(perAppTag(i));
                 }
             }
             if (inboundTags.isEmpty()) continue;

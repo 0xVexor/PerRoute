@@ -10,7 +10,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.unit.Density
 import app.perroute.compose.Appearance
-import app.perroute.compose.ConnectionBackend
+import app.perroute.backend.api.ConnectionBackend
 import app.perroute.compose.DiagnosticsTab
 import app.perroute.compose.ImportMethod
 import app.perroute.compose.ImportSession
@@ -20,12 +20,14 @@ import app.perroute.compose.backupModel
 import app.perroute.compose.serversModel
 import app.perroute.compose.rulesModel
 import app.perroute.compose.RuleEditor
-import app.perroute.compose.KeyboardNavigation
-import app.perroute.compose.PerRouteController
+import app.perroute.compose.ui.components.KeyboardNavigation
+import app.perroute.compose.controller.PerRouteController
 import app.perroute.compose.PerRouteWindow
-import app.perroute.compose.QuickAccessWindow
-import app.perroute.compose.RouteReport
+import app.perroute.compose.ui.components.QuickAccessWindow
+import app.perroute.backend.api.RouteObservation
 import app.perroute.compose.SettingsCategory
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
 import app.perroute.compose.Shell
 import app.perroute.compose.Tab
 import app.perroute.model.AppRoutes
@@ -80,6 +82,16 @@ private class MemoryPreferences : AbstractPreferences(null, "") {
 }
 
 private class DemoBackend(private val perAppDriver: Boolean = true) : ConnectionBackend {
+    override fun capabilities() = app.perroute.backend.api.BackendCapabilities.windows()
+    override fun installCore(progress: Consumer<String>) { error("Fixture") }
+    override fun installPerApp(progress: Consumer<String>) { error("Fixture") }
+    override fun checkForUpdate(feed: String): app.perroute.backend.api.UpdateDescriptor = error("Fixture")
+    override fun downloadUpdate(update: app.perroute.backend.api.UpdateDescriptor, progress: Consumer<Int>): java.nio.file.Path = error("Fixture")
+    override fun launchUpdate(installer: java.nio.file.Path) { error("Fixture") }
+    override fun setGatewayLimits(path: String, down: Long, up: Long) {}
+    override fun addGatewayListener(listener: Consumer<app.perroute.gateway.GatewayConnection>) {}
+    override fun applyRuntimeChange(change: XrayConfigGenerator.RuntimeChange, newTag: String, oldTag: String, config: String) { error("Fixture") }
+
     @Volatile private var running = false
     @Volatile private var startedAt = 0L
     @Volatile private var gatewayOn = false
@@ -108,9 +120,9 @@ private class DemoBackend(private val perAppDriver: Boolean = true) : Connection
     override fun stopPerAppSidecar() {}
     override fun applySystemProxy() {}
     override fun restoreSystemProxy() {}
-    override fun checkTunnel(socksPort: Int): ProxyHealthCheck.Result =
-        if (socksPort == XrayConfigGenerator.routeCheckPort(1)) ProxyHealthCheck.Result(false, "The proxy could not reach the test endpoint (SOCKS 4).")
-        else ProxyHealthCheck.Result(true, "Tunnel answered from cp.cloudflare.com (HTTP 204)")
+    override fun checkTunnel(socksPort: Int): app.perroute.backend.api.TunnelStatus =
+        if (socksPort == XrayConfigGenerator.routeCheckPort(1)) app.perroute.backend.api.TunnelStatus(false, "The proxy could not reach the test endpoint (SOCKS 4).")
+        else app.perroute.backend.api.TunnelStatus(true, "Tunnel answered from cp.cloudflare.com (HTTP 204)")
     override fun readInboundCounters(): Map<String, Long> {
         val seconds = (System.currentTimeMillis() - startedAt) / 250.0
         val counters = LinkedHashMap<String, Long>()
@@ -120,30 +132,30 @@ private class DemoBackend(private val perAppDriver: Boolean = true) : Connection
         }
         return counters
     }
-    override fun lookupPublicAddress(socksPort: Int?): RouteReport = when (socksPort) {
-        null -> RouteReport("198.51.100.24", "IR")
-        AppProxyLauncher.SOCKS_PORT -> RouteReport("203.0.113.10", "DE")
-        XrayConfigGenerator.routeCheckPort(0) -> RouteReport("203.0.113.20", "NL")
-        else -> RouteReport(error = "The proxy could not reach www.cloudflare.com (SOCKS 4).")
+    override fun lookupPublicAddress(socksPort: Int?): RouteObservation = when (socksPort) {
+        null -> RouteObservation("198.51.100.24", "IR", null)
+        AppProxyLauncher.SOCKS_PORT -> RouteObservation("203.0.113.10", "DE", null)
+        XrayConfigGenerator.routeCheckPort(0) -> RouteObservation("203.0.113.20", "NL", null)
+        else -> RouteObservation(null, null, "The proxy could not reach www.cloudflare.com (SOCKS 4).")
     }
     override fun systemDnsServers() = listOf("192.0.2.53", "192.0.2.54")
     override fun publicResolver(): String? = "192.0.2.80"
     override fun installedApplications() = listOf(
-        InstalledApplicationDiscovery.InstalledApplication("Google Chrome", CHROME),
-        InstalledApplicationDiscovery.InstalledApplication("Telegram", TELEGRAM),
-        InstalledApplicationDiscovery.InstalledApplication("Discord", DISCORD),
-        InstalledApplicationDiscovery.InstalledApplication("Spotify", SPOTIFY),
-        InstalledApplicationDiscovery.InstalledApplication("Visual Studio Code", "C:\\Program Files\\Microsoft VS Code\\Code.exe"),
-        InstalledApplicationDiscovery.InstalledApplication("Mozilla Firefox", "C:\\Program Files\\Mozilla Firefox\\firefox.exe"),
-        InstalledApplicationDiscovery.InstalledApplication("Steam", "C:\\Program Files (x86)\\Steam\\steam.exe"),
-        InstalledApplicationDiscovery.InstalledApplication("A media player with a remarkably long product name, Professional Edition",
+        app.perroute.backend.api.ApplicationDescriptor("Google Chrome", CHROME),
+        app.perroute.backend.api.ApplicationDescriptor("Telegram", TELEGRAM),
+        app.perroute.backend.api.ApplicationDescriptor("Discord", DISCORD),
+        app.perroute.backend.api.ApplicationDescriptor("Spotify", SPOTIFY),
+        app.perroute.backend.api.ApplicationDescriptor("Visual Studio Code", "C:\\Program Files\\Microsoft VS Code\\Code.exe"),
+        app.perroute.backend.api.ApplicationDescriptor("Mozilla Firefox", "C:\\Program Files\\Mozilla Firefox\\firefox.exe"),
+        app.perroute.backend.api.ApplicationDescriptor("Steam", "C:\\Program Files (x86)\\Steam\\steam.exe"),
+        app.perroute.backend.api.ApplicationDescriptor("A media player with a remarkably long product name, Professional Edition",
             "C:\\Program Files\\Example Software Company\\Remarkably Long Product Folder\\Professional Edition\\bin\\x64\\player.exe")
     )
     override fun bridgeFirewallReady(core: java.nio.file.Path, firstPort: Int, lastPort: Int) = true
-    override fun startIsolatedCore(config: String, socksPort: Int, onLine: (String) -> Unit): app.perroute.compose.IsolatedTunnel {
-        onLine("2026/10/19 16:12:01.000000 from 192.168.1.42:51000 accepted tcp:www.youtube.com:443 [perroute-bridge-0 -> proxy]")
-        onLine("2026/10/19 16:12:02.000000 from 192.168.1.42:51001 accepted tcp:i.ytimg.com:443 [perroute-bridge-0 -> proxy]")
-        return object : app.perroute.compose.IsolatedTunnel {
+    override fun startIsolatedCore(config: String, socksPort: Int, onLine: Consumer<String>): app.perroute.backend.api.IsolatedTunnel {
+        onLine.accept("2026/10/19 16:12:01.000000 from 192.168.1.42:51000 accepted tcp:www.youtube.com:443 [perroute-bridge-0 -> proxy]")
+        onLine.accept("2026/10/19 16:12:02.000000 from 192.168.1.42:51001 accepted tcp:i.ytimg.com:443 [perroute-bridge-0 -> proxy]")
+        return object : app.perroute.backend.api.IsolatedTunnel {
             override fun socksPort() = socksPort
             override fun alive() = true
             override fun lastLines() = emptyList<String>()
@@ -151,7 +163,7 @@ private class DemoBackend(private val perAppDriver: Boolean = true) : Connection
         }
     }
     override fun runningApplications() = listOf(
-        ProcessDiscovery.RunningApplication("chrome.exe", CHROME), ProcessDiscovery.RunningApplication("Telegram.exe", TELEGRAM))
+        app.perroute.backend.api.ApplicationDescriptor("chrome.exe", CHROME), app.perroute.backend.api.ApplicationDescriptor("Telegram.exe", TELEGRAM))
     override fun localNetworks(resolveNames: Boolean) = listOf(app.perroute.localnet.LocalNetwork("home-net", "Wi-Fi", "192.168.1.20", "192.168.1.0/24", 24,
         "192.168.1.1", "aa-bb-cc-dd-ee-ff", listOf("192.168.1.1"), listOf(
             app.perroute.localnet.LocalNetwork.Device("192.168.1.1", "aa-bb-cc-dd-ee-ff", "router.home", true),

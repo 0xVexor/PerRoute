@@ -18,7 +18,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
-final class StateProtector {
+final class StateProtector implements StateCipher {
     private static final byte[] DPAPI_HEADER = {'D', 'P', 'A', '1'};
     private static final byte[] AES_HEADER = {'A', 'G', 'C', '1'};
     private static final byte[] WRAPPED_KEY_HEADER = {'D', 'P', 'K', '1'};
@@ -29,7 +29,7 @@ final class StateProtector {
         this.keyFile = keyFile;
     }
 
-    byte[] protect(byte[] plain) throws IOException {
+    public byte[] protect(byte[] plain) throws IOException {
         try {
             byte[] nonce = new byte[12];
             RANDOM.nextBytes(nonce);
@@ -41,7 +41,7 @@ final class StateProtector {
         }
     }
 
-    byte[] unprotect(byte[] encrypted) throws IOException {
+    public byte[] unprotect(byte[] encrypted) throws IOException {
         if (startsWith(encrypted, DPAPI_HEADER)) {
             return WindowsDpapi.unprotect(Arrays.copyOfRange(encrypted, DPAPI_HEADER.length, encrypted.length));
         }

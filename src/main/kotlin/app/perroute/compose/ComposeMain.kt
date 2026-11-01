@@ -1,5 +1,31 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import app.perroute.platform.macos.MacApplicationIcon
+import app.perroute.model.ApplicationIdentity
+
+import app.perroute.compose.controller.ActionResult
+import app.perroute.compose.controller.ConnectionPhase
+import app.perroute.compose.controller.PerRouteController
+import app.perroute.compose.diagnostics.Perf
+import app.perroute.compose.ui.components.CompositionLtr
+import app.perroute.compose.ui.components.DialogCard
+import app.perroute.compose.ui.components.KeyboardNavigation
+import app.perroute.compose.ui.components.OpenMenus
+import app.perroute.compose.ui.components.PrimaryButton
+import app.perroute.compose.ui.components.QuickAccessWindow
+import app.perroute.compose.ui.components.SecondaryButton
+import app.perroute.compose.ui.components.appName
+import app.perroute.compose.ui.components.focusRing
+import app.perroute.compose.ui.components.joinNames
+import app.perroute.compose.ui.components.wheelAndDragScroll
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -63,6 +89,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -85,6 +112,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import app.perroute.platform.bootstrap.PlatformBootstrap
 import app.perroute.model.AppRoutes
 import app.perroute.model.ProxyNode
 import app.perroute.persistence.AppStateStore
@@ -160,13 +188,13 @@ internal class AppsDraft {
         auto = shell.controller.autoApps()
         pools = shell.controller.autoPools()
         manualPending = emptySet()
-        if (focused != null && selected.none { it.equals(focused, true) }) focused = null
+        if (focused != null && selected.none { ApplicationIdentity.same(it, focused) }) focused = null
     }
 
     fun dirty(shell: Shell): Boolean =
         advanced != shell.advanced || routes != shell.appRoutes || auto != shell.controller.autoApps() ||
             pools != shell.controller.autoPools() || manualPending.isNotEmpty() ||
-            selected.map { it.lowercase() } != shell.apps.map { it.lowercase() }
+            selected.map { ApplicationIdentity.comparisonKey(it) } != shell.apps.map { ApplicationIdentity.comparisonKey(it) }
 
     fun mode(path: String): app.perroute.routing.AppRouteMode {
         val key = AppRoutes.normalize(path)
@@ -191,10 +219,10 @@ internal class AppsDraft {
         pools = if (pool.kind() == app.perroute.routing.AutoCandidatePool.Kind.ALL) pools - key else pools + (key to pool.encode())
     }
 
-    fun isSelected(path: String) = selected.any { it.equals(path, true) }
+    fun isSelected(path: String) = selected.any { ApplicationIdentity.same(it, path) }
 
     fun toggle(path: String) {
-        if (isSelected(path)) selected.removeAll { it.equals(path, true) } else selected += path
+        if (isSelected(path)) selected.removeAll { ApplicationIdentity.same(it, path) } else selected += path
     }
 
     fun assign(path: String, nodeKey: String?) {
@@ -374,24 +402,6 @@ internal class Shell(
     }
 }
 
-private fun runProxyGuard(dataDirectory: Path, parentPid: Long?) {
-    val proxy = app.perroute.service.WindowsSystemProxyManager(dataDirectory)
-    val parent = parentPid?.let { ProcessHandle.of(it).orElse(null) }
-    while (parent != null && parent.isAlive) {
-        if (!proxy.hasPendingRestore()) return
-        Thread.sleep(1_000)
-    }
-    Thread.sleep(1_500)
-    if (!proxy.hasPendingRestore()) return
-    val lock = runCatching { SingleInstanceLock.acquire(dataDirectory) }.getOrNull() ?: return
-    try {
-        runCatching { app.perroute.service.XrayProcessManager().stopOrphan() }
-        runCatching { proxy.restore() }
-    } finally {
-        lock.close()
-    }
-}
-
 private fun initialWindowSize(): Pair<Dp, Dp> {
     val area = runCatching { GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds }.getOrNull()
     val width = (area?.width?.times(.92)?.toInt() ?: 1180).coerceAtMost(1180).coerceAtLeast(MinWindowWidth)
@@ -402,12 +412,51 @@ private fun initialWindowSize(): Pair<Dp, Dp> {
 internal const val MinWindowWidth = 820
 internal const val MinWindowHeight = 620
 
+/** Entry point: single-instance check, state loading, then the main window, the tray icon and the Quick Access panel. */
 fun main(args: Array<String>) {
+    if (args.firstOrNull() in setOf("--proxy-helper-status", "--proxy-helper-setup", "--proxy-helper-unregister", "--proxy-helper-unregister-interactive")) {
+        if (args.size != 1) kotlin.system.exitProcess(64)
+        kotlin.system.exitProcess(app.perroute.platform.macos.proxy.MacHelperMaintenance.run(args[0]))
+    }
+    // The isolated native probe must run in the real app process before platform services are constructed.
+    if (args.firstOrNull() == "--extension-spike") {
+        app.perroute.platform.macos.spike.MacExtensionSpike.main(args.drop(1).toTypedArray())
+        return
+    }
+    val macPreview = PlatformBootstrap.isMac(System.getProperty("os.name"))
+    if (macPreview && ("--guard" in args || "--recover" in args)) {
+        System.err.println("Network guard/recovery is unavailable in the macOS local preview.")
+        return
+    }
+    val storage = if (macPreview) try {
+        app.perroute.platform.macos.MacStateSession.openDefault(!GraphicsEnvironment.isHeadless())
+    } catch (error: Exception) {
+        val detail = "PerRoute could not open secure macOS settings: ${error.message}"
+        System.err.println(detail)
+        if (!GraphicsEnvironment.isHeadless()) javax.swing.JOptionPane.showMessageDialog(null, detail,
+            "PerRoute settings unavailable", javax.swing.JOptionPane.ERROR_MESSAGE)
+        return
+    } else null
+    try {
+        val preview = if (macPreview) app.perroute.platform.macos.MacPreviewSession.open() else null
+        try { runDesktop(args, preview, storage) } finally { preview?.close() }
+    } finally { storage?.close() }
+}
+
+private fun runDesktop(args: Array<String>, preview: app.perroute.platform.macos.MacPreviewSession?, storage: app.perroute.platform.macos.MacStateSession?) {
+    val platform = try {
+        if (preview != null && storage != null) PlatformBootstrap.forMac(preview.directory(), storage.routingServices())
+        else if (preview != null) PlatformBootstrap.forOs(System.getProperty("os.name"), preview.directory())
+        else PlatformBootstrap.create()
+    } catch (error: UnsupportedOperationException) {
+        System.err.println(error.message)
+        return
+    }
     Perf.mark("main.enter")
     val dataDirectory = AppDirectories.dataDirectory()
     val guardIndex = args.indexOf("--guard")
     if (guardIndex >= 0) {
-        runProxyGuard(dataDirectory, args.getOrNull(guardIndex + 1)?.toLongOrNull())
+        platform.recovery().runGuard(args.getOrNull(guardIndex + 1)?.toLongOrNull())
         return
     }
     val routeIndex = args.indexOf(app.perroute.service.QuickRouteRequests.ROUTE_ARGUMENT)
@@ -420,15 +469,15 @@ fun main(args: Array<String>) {
     }
     if (routeTarget != null) runCatching { requests.submitRoute(routeTarget) }
     if ("--recover" in args) {
-        runCatching { app.perroute.service.WindowsSystemProxyManager(dataDirectory).restore() }
+        runCatching { platform.recovery().recover() }
         lock.close()
         return
     }
     runCatching { app.perroute.update.StartupHealth(dataDirectory.resolve("startup-health.json"))
         .beginStart(app.perroute.service.SecureUpdateService.CURRENT_VERSION, System.currentTimeMillis()) }
-    val store = AppStateStore(dataDirectory.resolve("state.bin"))
+    val store = storage?.store() ?: AppStateStore(dataDirectory.resolve("state.bin"))
     val stateLoader = java.util.concurrent.CompletableFuture.supplyAsync {
-        runCatching { store.load() }
+        runCatching { storage?.state() ?: store.load() }
     }
     runCatching {
         Toolkit.getDefaultToolkit()
@@ -438,8 +487,17 @@ fun main(args: Array<String>) {
     val loaded = stateLoader.join()
     val state = loaded.getOrElse { app.perroute.model.AppState() }
     Perf.mark("state.loaded")
-    val controller = PerRouteController(state, store)
+    val controller = if (storage == null) PerRouteController(state, store, platform.connections())
+        else PerRouteController(state, store, platform.connections(), storage.preferences())
     loaded.exceptionOrNull()?.let { controller.reportStartupProblem("Saved settings could not be opened: ${it.message ?: it.javaClass.simpleName}") }
+    // The native macOS Quit menu may exit the JVM without unwinding the Compose application call.
+    val previewShutdown = preview?.let {
+        Thread({
+            controller.close()
+            runCatching { it.close() }
+            storage?.close()
+        }, "perroute-preview-cleanup").also { Runtime.getRuntime().addShutdownHook(it) }
+    }
     Perf.mark("controller.ready")
     controller.checkForUpdateInBackground()
     Appearance.load(controller)
@@ -453,6 +511,16 @@ fun main(args: Array<String>) {
         var trayBusy by remember { mutableStateOf(false) }
         var trayToggling by remember { mutableStateOf(false) }
         var mainWindow by remember { mutableStateOf<Frame?>(null) }
+        var dockCanReopen by remember { mutableStateOf(false) }
+        val macDesktop = PlatformBootstrap.isMac(System.getProperty("os.name"))
+        val macIcon = remember(macDesktop, Appearance.dark) {
+            if (macDesktop) runCatching { MacApplicationIcon.image(Appearance.dark) }.getOrNull() else null
+        }
+        val windowIcon = macIcon?.let { remember(it) { BitmapPainter(it.toComposeImageBitmap()) } }
+            ?: painterResource("icons/perroute-icon-256.png")
+        LaunchedEffect(macIcon) {
+            macIcon?.let { runCatching { MacApplicationIcon.apply(it) } }
+        }
         var nativeTrayIcon by remember { mutableStateOf<TrayIcon?>(null) }
         var trayConnected by remember { mutableStateOf(controller.isConnected()) }
         var traySelectedKey by remember { mutableStateOf(controller.selectedNodeKey()) }
@@ -474,6 +542,36 @@ fun main(args: Array<String>) {
         fun hideMainWindow() {
             val shell = shellHolder[0]
             if (shell == null) windowVisible = false else shell.leaveApps { windowVisible = false }
+        }
+        DisposableEffect(Unit) {
+            val hooks = app.perroute.platform.macos.MacDesktopIntegration.install(
+                { trayScope.launch {
+                    quickVisible = false
+                    windowVisible = true
+                    mainWindow?.let { frame ->
+                        frame.extendedState = frame.extendedState and Frame.ICONIFIED.inv()
+                        frame.isVisible = true
+                        frame.toFront()
+                        frame.requestFocus()
+                    }
+                } },
+                { trayScope.launch { exitPerRoute() } },
+                { trayScope.launch {
+                    windowVisible = true
+                    shellHolder[0]?.navigate(Tab.Settings)
+                } }
+            )
+            dockCanReopen = hooks.supportsReopen()
+            onDispose { hooks.close() }
+        }
+        fun handleMainKey(event: KeyEvent): Boolean {
+            if (macDesktop && event.type == KeyEventType.KeyDown && event.isMetaPressed) {
+                when (event.key) {
+                    Key.Comma -> { shellHolder[0]?.navigate(Tab.Settings); return true }
+                    Key.W -> { if (dockCanReopen || nativeTrayIcon != null) hideMainWindow() else exitPerRoute(); return true }
+                }
+            }
+            return shellHolder[0]?.handleKey(event) ?: false
         }
         fun trayAction(toggling: Boolean = false, action: () -> ActionResult) {
             if (trayBusy) return
@@ -582,21 +680,23 @@ fun main(args: Array<String>) {
         }
         Window(
             visible = windowVisible,
-            onCloseRequest = { hideMainWindow() },
+            onCloseRequest = { if (nativeTrayIcon == null && !dockCanReopen) exitPerRoute() else hideMainWindow() },
             state = windowState,
             title = "PerRoute",
-            icon = painterResource("icons/perroute-icon-256.png"),
+            icon = windowIcon,
             undecorated = true,
             transparent = false,
             resizable = true,
-            onPreviewKeyEvent = { event -> shellHolder[0]?.handleKey(event) ?: false }
+            onPreviewKeyEvent = ::handleMainKey
         ) {
             LaunchedEffect(Unit) {
                 mainWindow = window
                 window.minimumSize = Dimension(MinWindowWidth, MinWindowHeight)
             }
             LaunchedEffect(Appearance.style, Appearance.dark) {
-                window.background = if (Appearance.style == UiStyle.NEW) java.awt.Color(23, 25, 25)
+                window.background = if (Appearance.style == UiStyle.NEW) {
+                    if (Appearance.dark) java.awt.Color(23, 25, 25) else java.awt.Color(244, 244, 239)
+                }
                     else if (Appearance.dark) java.awt.Color(23, 23, 30) else java.awt.Color(247, 247, 250)
             }
             remember { Perf.mark("window.compose") }
@@ -618,7 +718,7 @@ fun main(args: Array<String>) {
             onCloseRequest = { quickVisible = false },
             state = quickState,
             title = "PerRoute Quick Access",
-            icon = painterResource("icons/perroute-icon-256.png"),
+            icon = windowIcon,
             undecorated = true,
             transparent = false,
             resizable = false,
@@ -689,8 +789,11 @@ fun main(args: Array<String>) {
             Files.createDirectories(dataDirectory)
             Files.writeString(dataDirectory.resolve("compose-error.log"), trace)
         }
+        if (preview != null) System.err.print(trace)
+    } finally {
         controller.close()
         lock.close()
+        previewShutdown?.let { runCatching { Runtime.getRuntime().removeShutdownHook(it) } }
     }
 }
 
@@ -836,6 +939,7 @@ internal fun PerRouteWindow(
 }
 
 private fun offerUpdate(shell: Shell, version: String) {
+    if (!shell.controller.capabilities().updates()) return
     shell.showDialog {
         DialogCard("PerRoute $version is ready", "Downloaded and verified in the background.", shell::closeDialog, width = 480.dp,
             actions = {
@@ -854,6 +958,7 @@ private fun offerUpdate(shell: Shell, version: String) {
 }
 
 private fun offerRollback(shell: Shell, status: app.perroute.update.StartupHealth.Status, version: String) {
+    if (!shell.controller.capabilities().updates()) return
     shell.showDialog {
         DialogCard("PerRoute did not start properly", "PerRoute ${status.version()} did not finish starting ${status.failedStarts()} times in a row.", shell::closeDialog, width = 480.dp,
             actions = {
@@ -962,9 +1067,9 @@ private enum class WindowControl { MINIMIZE, RESTORE, CLOSE }
 @Composable
 internal fun WindowButtons(chrome: WindowChrome, tint: Color, height: Dp = 44.dp, width: Dp = 50.dp) {
     Row(Modifier.fillMaxHeight()) {
-        WindowButton(WindowControl.MINIMIZE, "Minimize to the notification area", tint, height, width, chrome.minimize)
+        WindowButton(WindowControl.MINIMIZE, if (IsMacDesktop) "Hide window" else "Minimize to the notification area", tint, height, width, chrome.minimize)
         WindowButton(WindowControl.RESTORE, "Maximize or restore", tint, height, width, chrome.maximize)
-        WindowButton(WindowControl.CLOSE, "Close to the notification area", tint, height, width, chrome.close)
+        WindowButton(WindowControl.CLOSE, if (IsMacDesktop) "Close window" else "Close to the notification area", tint, height, width, chrome.close)
     }
 }
 

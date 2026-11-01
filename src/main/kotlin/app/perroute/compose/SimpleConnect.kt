@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -107,7 +112,7 @@ internal fun SimpleConnectionPage(shell: Shell) {
         Spacer(Modifier.height(14.dp))
         if (!shell.perApp) Text(when (shell.mode) {
             ConnectionMode.BROWSER_PROXY -> "Enter either endpoint in an application's own proxy settings. Everything else stays direct."
-            ConnectionMode.SYSTEM_PROXY -> "Applications that follow Windows proxy settings use the main server."
+            ConnectionMode.SYSTEM_PROXY -> "Applications that follow system proxy settings use the main server."
             else -> "Network traffic is routed by the compatibility tunnel."
         }, color = Muted, fontSize = 14.sp)
         else if (shell.apps.isEmpty()) Text("No apps selected yet. Choose the applications that should use the proxy.", color = Muted, fontSize = 14.sp)
@@ -211,7 +216,7 @@ private fun SimpleRouteDetails(shell: Shell, view: ConnectionView, now: Long) {
                                 Spacer(Modifier.width(8.dp)); RoutePill(row.kind)
                             }
                             Text(when {
-                                !shell.perApp -> if (shell.mode == ConnectionMode.SYSTEM_PROXY) "Apps that follow Windows proxy settings" else "Apps you point at the local proxy"
+                                !shell.perApp -> if (shell.mode == ConnectionMode.SYSTEM_PROXY) "Apps that follow system proxy settings" else "Apps you point at the local proxy"
                                 row.applications.isEmpty() -> "No selected app"
                                 else -> joinNames(row.applications.map(::appName), 4)
                             }, color = Muted, fontSize = 13.sp, maxLines = 1)

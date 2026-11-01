@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -145,6 +150,10 @@ internal fun recoveryModel(shell: Shell): RecoveryModel = settingsModel(shell, S
 
 @Composable
 internal fun RecoverySettings(shell: Shell) {
+    if (!shell.controller.capabilities().networkRecovery()) {
+        UnavailableFeature("Recovery", "macOS restores owned proxy and routing settings on Disconnect and during helper recovery.")
+        return
+    }
     val model = recoveryModel(shell)
     LaunchedEffect(shell.connected) { model.reload() }
     val plan = model.plan
@@ -247,6 +256,7 @@ internal fun formatSnapshotTime(millis: Long): String =
 
 @Composable
 internal fun RollbackNote(shell: Shell) {
+    if (!shell.controller.capabilities().updates()) return
     val model = recoveryModel(shell)
     LaunchedEffect(Unit) { if (model.plan == null) model.reload() }
     val version = model.rollback ?: return
@@ -301,6 +311,10 @@ internal class LocalNetworkModel(private val shell: Shell) {
 
 @Composable
 internal fun LocalNetworkSettings(shell: Shell) {
+    if (!shell.controller.capabilities().networkRecovery()) {
+        UnavailableFeature("Local network controls", "Network discovery and trust controls have not been ported. This page does not verify local-network protection.")
+        return
+    }
     val model = settingsModel(shell, SettingsCategory.LocalNetwork) { LocalNetworkModel(shell) }
     LaunchedEffect(Unit) { if (model.networks == null) model.reload() }
     FeatureBlock("Local devices", "Printers, NAS drives, the router and other devices on your network are always reached directly, never through a server, which could not reach them.", first = true)

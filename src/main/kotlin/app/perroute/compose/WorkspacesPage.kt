@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -114,6 +119,10 @@ internal fun workspacesModel(shell: Shell): WorkspacesModel = shell.screen("${Ta
 
 @Composable
 internal fun WorkspacesPage(shell: Shell) {
+    if (!shell.controller.workspacesSupported()) {
+        UnavailableFeature("Browser workspaces", "Isolated browser launch and profile routing have not been ported.")
+        return
+    }
     val model = workspacesModel(shell)
     LaunchedEffect(Unit) {
         model.loadBrowsers()

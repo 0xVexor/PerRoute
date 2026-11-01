@@ -29,8 +29,13 @@ public final class AppGateway implements AutoCloseable {
     public static final int MAX_CONNECTIONS_PER_APP = 4_096;
     static final int BUFFER_SIZE = 16 * 1024;
     static final int UDP_SOCKET_BUFFER = 4 * 1024 * 1024;
-    private static final InetAddress LOOPBACK = InetAddress.getLoopbackAddress();
+    private static final InetAddress LOOPBACK = ipv4Loopback();
+    private static InetAddress ipv4Loopback() {
+        try { return InetAddress.getByAddress(new byte[]{127,0,0,1}); }
+        catch (java.net.UnknownHostException impossible) { throw new ExceptionInInitializerError(impossible); }
+    }
 
+    /** One application: the port the platform routing engine uses and the Xray inbound behind it. */
     public record Route(String applicationPath, int applicationIndex, int listenPort, int upstreamPort) {}
 
     public record Counters(long downloadBytes, long uploadBytes, int openConnections, long rejectedConnections) {}
@@ -109,7 +114,7 @@ public final class AppGateway implements AutoCloseable {
         return channel == null ? new Counters(0, 0, 0, 0) : channel.counters();
     }
 
-    private static String key(String path) { return path == null ? "" : path.toLowerCase(java.util.Locale.ROOT); }
+    private static String key(String path) { return path == null ? "" : app.perroute.model.ApplicationIdentity.comparisonKey(path); }
 
     private final class Channel {
         final Route route;

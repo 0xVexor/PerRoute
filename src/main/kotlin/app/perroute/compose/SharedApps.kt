@@ -1,5 +1,10 @@
 package app.perroute.compose
 
+import app.perroute.compose.controller.*
+import app.perroute.compose.ui.components.*
+import app.perroute.compose.inspector.*
+import app.perroute.compose.diagnostics.*
+import app.perroute.backend.api.IsolatedTunnel
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.perroute.model.ApplicationIdentity
 import app.perroute.model.AppRoutes
 import app.perroute.model.BandwidthPolicy
 import app.perroute.model.ProxyNode
@@ -131,17 +137,17 @@ internal class AppsModel(private val shell: Shell) {
     val loading: Boolean get() = if (source == AppListSource.RUNNING) runningLoading else installedLoading
 
     fun visible(): List<AppChoice> {
-        (shell.apps + shell.draft.selected).forEach { path -> if (manual.none { it.equals(path, true) }) manual += path }
+        (shell.apps + shell.draft.selected).forEach { path -> if (manual.none { ApplicationIdentity.same(it, path) }) manual += path }
         val discovered = if (source == AppListSource.RUNNING) running else installed
         val moved = manual.filter(app.perroute.service.StoreAppPaths::isStorePath).mapNotNull { saved ->
             app.perroute.service.StoreAppPaths.current(saved).takeIf { !it.equals(saved, true) }?.let { it.lowercase() to saved }
         }.toMap()
         val available = if (moved.isEmpty()) discovered else discovered.map { choice -> moved[choice.path.lowercase()]?.let { AppChoice(choice.name, it) } ?: choice }
-        val extra = manual.filter { path -> available.none { it.path.equals(path, true) } }.map { AppChoice(fileName(it), it) }
+        val extra = manual.filter { path -> available.none { ApplicationIdentity.same(it.path, path) } }.map { AppChoice(fileName(it), it) }
         val key = available to shell.apps.toList()
-        if (pinnedFor != key) { pinnedFor = key; pinned = shell.apps.mapTo(hashSetOf()) { it.lowercase() } }
+        if (pinnedFor != key) { pinnedFor = key; pinned = shell.apps.mapTo(hashSetOf()) { ApplicationIdentity.comparisonKey(it) } }
         return (extra + available).filter { query.isBlank() || it.name.contains(query, true) || it.path.contains(query, true) }
-            .sortedByDescending { it.path.lowercase() in pinned }
+            .sortedByDescending { ApplicationIdentity.comparisonKey(it.path) in pinned }
     }
 
     fun selectedRoutes(): List<Pair<String, DraftRoute>> = shell.draft.selected.map { it to draftRoute(shell, it) }
@@ -164,7 +170,7 @@ internal class AppsModel(private val shell: Shell) {
         if (shell.locked) return
         val draft = shell.draft
         draft.toggle(path)
-        draft.focused = if (draft.isSelected(path)) path else draft.focused?.takeUnless { it.equals(path, true) }
+        draft.focused = if (draft.isSelected(path)) path else draft.focused?.takeUnless { ApplicationIdentity.same(it, path) }
     }
 
     fun focus(path: String) { shell.draft.focused = path }
@@ -172,11 +178,16 @@ internal class AppsModel(private val shell: Shell) {
     fun browseExe() {
         val owner = shell.hostWindow ?: return
         val dialog = FileDialog(owner, "Choose application", FileDialog.LOAD).apply {
-            filenameFilter = java.io.FilenameFilter { _, name -> name.endsWith(".exe", true) }
+            filenameFilter = java.io.FilenameFilter { directory, name ->
+                if (System.getProperty("os.name") == "Mac OS X") java.io.File(directory,name).canExecute() else name.endsWith(".exe", true)
+            }
             isVisible = true
         }
         val file = dialog.file ?: return
-        val path = Path.of(dialog.directory, file).toAbsolutePath().normalize().toString()
+        val raw = Path.of(dialog.directory, file).toAbsolutePath().normalize().toString()
+        val path = runCatching { shell.controller.selectedApplicationIdentity(raw) }.getOrElse {
+            shell.notify(ActionResult(false,it.message ?: "Select an executable from the application list.")); return
+        }
         if (!shell.draft.isSelected(path)) shell.draft.selected += path
         shell.draft.focused = path
     }
@@ -368,7 +379,7 @@ internal fun formatMbpsInput(bits: Long): String {
 
 @Composable
 internal fun rememberBandwidthForm(shell: Shell, path: String): BandwidthForm {
-    val form = shell.screen("${shell.tab.name}:bandwidth:${path.lowercase()}") { BandwidthForm(shell, path) }
+    val form = shell.screen("${shell.tab.name}:bandwidth:${ApplicationIdentity.comparisonKey(path)}") { BandwidthForm(shell, path) }
     LaunchedEffect(path, shell.traffic, shell.connected) { form.refreshStatus() }
     return form
 }

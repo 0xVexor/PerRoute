@@ -1,15 +1,15 @@
 package app.perroute;
 
-import app.perroute.compose.ActionResult;
+import app.perroute.compose.controller.ActionResult;
 import app.perroute.compose.CheckStatus;
 import app.perroute.compose.CoreLogHints;
 import app.perroute.compose.HealthFinding;
 import app.perroute.compose.HealthReport;
-import app.perroute.compose.PerRouteController;
-import app.perroute.compose.RecipeDraft;
+import app.perroute.compose.controller.PerRouteController;
+import app.perroute.compose.controller.RecipeDraft;
 import app.perroute.compose.Repair;
 import app.perroute.compose.RuleAnalysis;
-import app.perroute.compose.TemporaryRoute;
+import app.perroute.compose.controller.TemporaryRoute;
 import app.perroute.gaming.GamingProbe;
 import app.perroute.gaming.GamingScore;
 import app.perroute.localnet.LocalNetwork;
@@ -818,6 +818,7 @@ final class V35Tests {
         check(!view.getRunning() && view.getProblem().isEmpty(), "Ready to open");
         check(c.updateWorkspace(view.getWorkspace().id(), "Work", f.chrome, "second").getOk(), "Move it to another server");
         equal("second", c.workspaces().get(0).getNode().key());
+        f.backend.failIsolatedStart = "Core unavailable in this fixture";
         ActionResult opened = c.openWorkspace(view.getWorkspace().id());
         check(!opened.getOk() && opened.getMessage().contains("could not start its route"), "Without a core the workspace does not open: " + opened.getMessage());
         check(c.removeWorkspace(view.getWorkspace().id(), false).getOk() && c.workspaces().isEmpty(), "Remove");
