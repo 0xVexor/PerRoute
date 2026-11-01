@@ -91,8 +91,10 @@ $WindowsPacketFilter = Get-VerifiedAsset `
     -Length 819200
 
 & (Join-Path $ProjectRoot 'scripts/fetch_windows_xray.ps1')
-$RepositoryArgs = if ($OfficialRepositories) { @('-PofficialRepositories=true') } else { @() }
-& $Gradle -g $GradleHome --no-daemon @RepositoryArgs createDistributable
+$GradleArguments = @('-g', $GradleHome, '--no-daemon')
+if ($OfficialRepositories) { $GradleArguments += '-PofficialRepositories=true' }
+$GradleArguments += 'createDistributable'
+& $Gradle @GradleArguments
 if ($LASTEXITCODE -ne 0) { throw 'Compose Desktop build failed.' }
 
 # Browser extension and its runtime (helper + pinned Xray). See browser/README.md.
