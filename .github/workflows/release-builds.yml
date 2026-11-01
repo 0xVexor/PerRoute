@@ -91,21 +91,21 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.3'
+          go-version: '1.25.5'
           cache: false
       - name: Validate architecture, shared version and tag
         run: |
           test "$(uname -m)" = arm64
           python3 scripts/release_artifacts.py
           if [ "$GITHUB_REF_TYPE" = tag ]; then python3 scripts/release_artifacts.py --tag "$GITHUB_REF_NAME"; fi
+      - name: Restore persistent preview signing identity
+        if: env.MACOS_SIGNING_STATE != '' || github.ref_type == 'tag'
+        run: python3 scripts/restore_macos_signing.py
       - name: Verify portable and packaging suites
         run: sh gradlew --no-daemon -PofficialRepositories=true runAllTests runPlatformBoundaryTests runApplicationIdentityTests runMacosDmgTests runMacosPkgTests
       - name: Build application image without signing credentials
         if: env.MACOS_SIGNING_STATE == '' && github.ref_type != 'tag'
         run: sh gradlew --no-daemon -PofficialRepositories=true createDistributable
-      - name: Restore persistent preview signing identity
-        if: env.MACOS_SIGNING_STATE != '' || github.ref_type == 'tag'
-        run: python3 scripts/restore_macos_signing.py
       - name: Build and verify helper-enabled Apple Silicon installer
         if: env.MACOS_SIGNING_STATE != '' || github.ref_type == 'tag'
         run: |
