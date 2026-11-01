@@ -66,6 +66,6 @@ shutil.copyfile('/usr/bin/true', probe)
 run('/usr/bin/codesign', '--force', '--timestamp=none', '--keychain', keychain,
     '--sign', settings['sha1'], probe)
 run('/usr/bin/codesign', '--verify', '--strict', '-R',
-    f'certificate leaf = H"{settings["sha1"]}"', probe)
+    f'=certificate leaf = H"{settings["sha1"]}"', probe)
 probe.unlink()
 print('Persistent preview identity imported and signing probe verified; private material omitted')
