@@ -713,8 +713,13 @@ final class V3DomainTests {
                 try { read = held.getInputStream().read(); } catch (IOException closed) { read = -1; }
                 equal(-1, read);
                 held.close();
-                try (ServerSocket reuse = new ServerSocket()) {
-                    reuse.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+                // A closed TCP session can retain this port in TIME_WAIT on macOS.
+                // Prove the listener stopped without requiring immediate port reuse.
+                try (Socket afterStop = new Socket()) {
+                    try {
+                        afterStop.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 1_000);
+                        throw new AssertionError("A stopped gateway must refuse new connections");
+                    } catch (java.net.ConnectException expected) { }
                 }
             } finally {
                 gateway.stop();

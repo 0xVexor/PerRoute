@@ -3,7 +3,7 @@ name: Portable regression suites
 on:
   pull_request:
   push:
-    branches: [test/portable-regression-fixtures]
+    branches: [test/portable-regression-fixtures, feature/macos-advanced-routing-lifecycle]
   workflow_dispatch:
 
 concurrency:
