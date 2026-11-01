@@ -13,11 +13,12 @@ public final class BuildIdentity {
         } catch (java.io.IOException ignored) { }
         return values;
     }
+    public static String version() { return VALUES.getProperty("version", "dev"); }
     public static String number() { return VALUES.getProperty("number", "dev"); }
     public static String revision() { return VALUES.getProperty("revision", "unknown"); }
     public static String displayVersion() {
         String revision = revision();
-        return SecureUpdateService.CURRENT_VERSION + " (build " + number() + ", " +
+        return version() + " (build " + number() + ", " +
                 revision.substring(0, Math.min(12, revision.length())) + ")";
     }
 }

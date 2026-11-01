@@ -18,10 +18,10 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("PerRoute Setup")]
 [assembly: AssemblyDescription("Installer for PerRoute and the PerRoute browser extension")]
-[assembly: AssemblyCompany("Ali Mirzad")]
+[assembly: AssemblyCompany("PerRoute")]
 [assembly: AssemblyProduct("PerRoute")]
-[assembly: AssemblyVersion("3.6.0.0")]
-[assembly: AssemblyFileVersion("3.6.0.0")]
+[assembly: AssemblyVersion(ReleaseInfo.Version + ".0")]
+[assembly: AssemblyFileVersion(ReleaseInfo.Version + ".0")]
 
 namespace PerRouteSetup
 {
@@ -411,7 +411,7 @@ namespace PerRouteSetup
 
     internal sealed class InstallerForm : Form
     {
-        internal const string Version = "3.6.0";
+        internal const string Version = ReleaseInfo.Version;
         private const string ResourceName = "PerRoute.Payload";
         private const string BrowserResourceName = "PerRoute.BrowserPayload";
         private const string ExtensionIdResourceName = "PerRoute.ExtensionId";
@@ -543,7 +543,7 @@ namespace PerRouteSetup
             railSteps.BackColor = Color.Transparent;
             railSteps.Paint += PaintRailSteps;
             rail.Controls.Add(railSteps);
-            rail.Controls.Add(new Label { Text = "Ali Mirzad", Font = Palette.Font(8.25F, FontStyle.Bold), ForeColor = Color.FromArgb(150, Palette.Lime), AutoSize = true, Location = new Point(28, 500), BackColor = Color.Transparent });
+            rail.Controls.Add(new Label { Text = "PerRoute", Font = Palette.Font(8.25F, FontStyle.Bold), ForeColor = Color.FromArgb(150, Palette.Lime), AutoSize = true, Location = new Point(28, 500), BackColor = Color.Transparent });
         }
 
         private void PaintRailSteps(object sender, PaintEventArgs e)
@@ -1302,7 +1302,7 @@ namespace PerRouteSetup
                 {
                     key.SetValue("DisplayName", appLocation == null ? "PerRoute browser extension" : "PerRoute");
                     key.SetValue("DisplayVersion", Version);
-                    key.SetValue("Publisher", "Ali Mirzad");
+                    key.SetValue("Publisher", "PerRoute");
                     if (appLocation != null)
                     {
                         key.SetValue("InstallLocation", appLocation);

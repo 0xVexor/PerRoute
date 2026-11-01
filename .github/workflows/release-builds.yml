@@ -1,0 +1,146 @@
+name: Installers and release builds
+
+on:
+  push:
+    branches: [main, 'build/**']
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/release-builds.yml'
+      - 'scripts/release_artifacts.py'
+      - 'scripts/restore_macos_signing.py'
+      - 'scripts/fetch_windows_xray.ps1'
+      - 'package.ps1'
+      - 'installer/**'
+      - 'gradle.properties'
+      - 'build.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate shared version and tag
+        shell: pwsh
+        run: |
+          python scripts/test_release_artifacts.py
+          if ($LASTEXITCODE -ne 0) { throw 'Release guard tests failed' }
+          python scripts/release_artifacts.py
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { python scripts/release_artifacts.py --tag $env:GITHUB_REF_NAME }
+          if ($LASTEXITCODE -ne 0) { throw 'Release identity validation failed' }
+      - name: Build offline installer, portable app and browser bundle
+        shell: pwsh
+        run: ./package.ps1 -OfficialRepositories
+      - name: Verify Windows regression suites
+        shell: pwsh
+        run: |
+          ./gradlew.bat --no-daemon -PofficialRepositories=true runAllTests runPlatformBoundaryTests
+          if ($LASTEXITCODE -ne 0) { throw 'Windows regressions failed' }
+      - name: Check native installer branding and version
+        shell: pwsh
+        run: |
+          $version = ((Get-Content gradle.properties | Where-Object { $_ -match '^appVersion=' }) -replace '^appVersion=', '').Trim()
+          foreach ($path in "dist/PerRoute-Setup-$version.exe", "dist/PerRoute-$version/Uninstall.exe", "dist/PerRoute-$version/PerRouteRecovery.exe") {
+            $info = (Get-Item $path).VersionInfo
+            if ($info.FileVersion -ne "$version.0" -or $info.CompanyName -ne 'PerRoute') { throw "Incorrect native metadata: $path" }
+          }
+          python scripts/release_artifacts.py --stage windows-x64
+          if ($LASTEXITCODE -ne 0) { throw 'Windows payload verification failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-x64
+          path: build/release/windows-x64/*
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      MACOS_SIGNING_STATE: ${{ secrets.MACOS_SIGNING_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+          cache: false
+      - name: Validate architecture, shared version and tag
+        run: |
+          test "$(uname -m)" = arm64
+          python3 scripts/release_artifacts.py
+          if [ "$GITHUB_REF_TYPE" = tag ]; then python3 scripts/release_artifacts.py --tag "$GITHUB_REF_NAME"; fi
+      - name: Verify portable and packaging suites
+        run: sh gradlew --no-daemon -PofficialRepositories=true runAllTests runPlatformBoundaryTests runApplicationIdentityTests runMacosDmgTests runMacosPkgTests
+      - name: Build application image without signing credentials
+        if: env.MACOS_SIGNING_STATE == '' && github.ref_type != 'tag'
+        run: sh gradlew --no-daemon -PofficialRepositories=true createDistributable
+      - name: Restore persistent preview signing identity
+        if: env.MACOS_SIGNING_STATE != '' || github.ref_type == 'tag'
+        run: python3 scripts/restore_macos_signing.py
+      - name: Build and verify helper-enabled Apple Silicon installer
+        if: env.MACOS_SIGNING_STATE != '' || github.ref_type == 'tag'
+        run: |
+          sh gradlew --no-daemon -PofficialRepositories=true packageMacosSafariPkg
+          python3 scripts/release_artifacts.py --stage macos-arm64
+      - uses: actions/upload-artifact@v4
+        if: env.MACOS_SIGNING_STATE != ''
+        with:
+          name: release-macos-arm64
+          path: build/release/macos-arm64/*
+          if-no-files-found: error
+      - name: Remove private signing files from ephemeral runner
+        if: always()
+        run: rm -rf .perroute-local-signing
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: build/publish
+          merge-multiple: true
+      - name: Verify both platforms came from this tag and generate checksums
+        run: python3 scripts/release_artifacts.py --tag "$GITHUB_REF_NAME" --verify build/publish
+      - name: Publish verified release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "PerRoute ${GITHUB_REF_NAME#v}" --notes-file "docs/releases/$GITHUB_REF_NAME.md" build/publish/*
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest=false

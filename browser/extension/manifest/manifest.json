@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "PerRoute",
   "version": "1.0.0",
-  "description": "Route this browser through VLESS, VMess, Trojan or Shadowsocks servers, and choose site by site what uses the tunnel. By Ali Mirzad.",
-  "author": "Ali Mirzad",
+  "description": "Route this browser through VLESS, VMess, Trojan or Shadowsocks servers, and choose site by site what uses the tunnel.",
+  "author": "PerRoute",
   "minimum_chrome_version": "116",
   "permissions": [
     "proxy",

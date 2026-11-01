@@ -10,7 +10,7 @@ A Windows and macOS desktop client for VLESS, VMess, Trojan and Shadowsocks, bui
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D6)
 ![macOS](https://img.shields.io/badge/macOS-13%2B%20preview-555555)
-![Version](https://img.shields.io/badge/version-3.6.0-6B57D9)
+![Version](https://img.shields.io/badge/version-3.7.0-6B57D9)
 ![Built with](https://img.shields.io/badge/built%20with-Kotlin%20%2B%20Compose%20Desktop-7F52FF)
 ![Core](https://img.shields.io/badge/core-Xray-0B9B83)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
@@ -29,17 +29,14 @@ Most proxy clients are all-or-nothing: either the whole system goes through the 
 
 When you do want everything proxied, System proxy and Local proxy modes are one click away.
 
-## What's new in 3.6.0
+## What's new in 3.7.0
 
-Windows release highlights follow. For macOS, see the [desktop preview](#macos-version).
+- PerRoute branding in Windows installation, recovery, removal and browser registration.
+- A shared desktop version for Windows and macOS, including installer metadata and update comparisons.
+- CI builds Windows offline installers, portable apps and browser bundles, plus the Apple Silicon macOS preview PKG.
+- Safari routing, verified application/helper grouping and expanded portable routing regression coverage.
 
-- **Browser extension.** PerRoute now comes to Chrome, Edge, Brave and Vivaldi, with or without the app. Choose site by site what uses the tunnel, opens directly or is blocked, with a server per site, temporary rules, a kill switch, server tests, failover and a request inspector. The installer asks whether you want the app, the extension or both. See [Browser extension](#browser-extension).
-- **Quick Route.** Right-click a program or its shortcut in Explorer and choose **Route with PerRoute** to give it a route without opening Apps (turn it on in *Settings > General*).
-- **LAN Bridge.** Share this computer's connection with a phone, tablet or TV on the same Wi-Fi for an hour, four hours or until you stop (*Tools > LAN Bridge*).
-- **Resource saving.** On battery or a metered network, background server checks run less often, automatic speed tests pause and updates wait (*Settings > Automation*, on by default).
-- **A new installer** that lets you choose the app, the browser extension or both, and an uninstaller that also removes Quick Route and LAN Bridge leftovers.
-
-Full notes: [docs/releases/v3.6.0.md](docs/releases/v3.6.0.md).
+Full notes: [docs/releases/v3.7.0.md](docs/releases/v3.7.0.md).
 
 ## Features
 
@@ -88,19 +85,19 @@ Windows features are listed below; see [macOS support and limits](#macos-version
 
 ## Download
 
-Download installers from [Releases](https://github.com/AliMirzad/PerRoute/releases). macOS downloads will appear there when published.
+Download installers from [Releases](https://github.com/0xVexor/PerRoute/releases). Windows and Apple Silicon macOS downloads share the same release version.
 
 | Package | Use it when |
 |---|---|
-| `PerRoute-Setup-3.6.0.exe` | You want everything, including Smart per-app mode. The installer asks for Administrator approval once; choose the app, the browser extension or both. |
-| `PerRoute-Portable-3.6.0.zip` | You want a no-install build. Extract the folder and run `PerRoute.exe`. System proxy and Local proxy work out of the box; Smart per-app works only if the per-app engine is already installed. |
+| `PerRoute-Setup-3.7.0.exe` | You want everything, including Smart per-app mode. The installer asks for Administrator approval once; choose the app, the browser extension or both. |
+| `PerRoute-Portable-3.7.0.zip` | You want a no-install build. Extract the folder and run `PerRoute.exe`. System proxy and Local proxy work out of the box; Smart per-app works only if the per-app engine is already installed. |
 
 **Requirements:** Windows 10 or 11, 64-bit. The Java runtime and Xray core are bundled; nothing else needs to be installed.
 
 Verify a download against the SHA-256 values published with each release:
 
 ```powershell
-Get-FileHash .\PerRoute-Setup-3.6.0.exe -Algorithm SHA256
+Get-FileHash .\PerRoute-Setup-3.7.0.exe -Algorithm SHA256
 ```
 
 ## macOS version
@@ -117,7 +114,7 @@ Per-app limitations: the separate Safari test build includes responsible-process
 
 ### Install on macOS
 
-For collaborator testing, use the Apple Silicon `.pkg` Installer package from `build/macos-pkg/`. It installs PerRoute into Applications and registers its matching background helper through the standard macOS Installer under one administrator approval. A macOS installer has not been published to [Releases](https://github.com/AliMirzad/PerRoute/releases) yet.
+For collaborator testing, use the Apple Silicon `.pkg` Installer package from `build/macos-pkg/`. It installs PerRoute into Applications and registers its matching background helper through the standard macOS Installer under one administrator approval. Release builds include an Apple Silicon preview PKG and a ZIP containing installation guidance and modified engine source. macOS packages remain locally signed and unnotarized.
 
 1. Disconnect and Quit an existing PerRoute instance. Open the `.pkg` and follow Installer's prompts to install on the startup disk. The optional DMG still supports dragging **PerRoute.app** to **Applications** and ejecting the disk.
 2. Open **Applications > PerRoute**.
@@ -348,7 +345,7 @@ The extension brings PerRoute into Chromium browsers. Where the desktop app rout
 - **Protection:** kill switch, WebRTC protection, automatic failover, and DNS resolved on the server for tunnel sites.
 - **Doctor:** checks the runtime, the server, the live route and the exit address, and shows every host a tab contacts.
 
-On Windows, to install it, run `PerRoute-Setup-3.6.0.exe` and choose **Browser extension**. The installer puts the runtime in `C:\Program Files\PerRoute Browser`, registers it with your browsers and shows the last step: open the extensions page, turn on Developer mode and choose **Load unpacked** with the `extension` folder. Developer documentation is in [browser/README.md](browser/README.md).
+On Windows, to install it, run `PerRoute-Setup-3.7.0.exe` and choose **Browser extension**. The installer puts the runtime in `C:\Program Files\PerRoute Browser`, registers it with your browsers and shows the last step: open the extensions page, turn on Developer mode and choose **Load unpacked** with the `extension` folder. Developer documentation is in [browser/README.md](browser/README.md).
 
 ## Connection modes
 
@@ -456,7 +453,7 @@ sh gradlew --no-daemon packageMacosSafariPkg
 
 This builds the modified source-pinned engine and matching app/helper PKG without running test suites or installing anything. The output in `build/macos-safari-pkg/` includes the PKG, complete modified engine sources, checksums, testing instructions and `Collect Safari Logs.command`. After reproducing an issue, run that command to copy bounded attribution diagnostics, then copy **Settings > Activity log > Copy all** as well. Native attribution logs exclude destinations, URLs and credentials.
 
-The app shows `3.6.0 (build N, REVISION)`. `N` is the number of commits reachable from the source commit in full Git history; the revision distinguishes branches with the same count. The same revision produces the same build identifier. Finder's `CFBundleVersion`, the package filename and `BUILD.json` carry that identity too. This identifies source builds; it does not claim byte-identical installers.
+The app shows `3.7.0 (build N, REVISION)`. `N` is the number of commits reachable from the source commit in full Git history; the revision distinguishes branches with the same count. The same revision produces the same build identifier. Finder's `CFBundleVersion`, the package filename and `BUILD.json` carry that identity too. This identifies source builds; it does not claim byte-identical installers.
 
 Local signing state lives in the ignored `.perroute-local-signing/` directory and must be retained across builds. If the original signing state is missing, an explicit known-certificate migration requires the old certificate's signed installer and helper:
 
@@ -506,10 +503,10 @@ This produces the following in `dist/`:
 
 | Output | Description |
 |---|---|
-| `PerRoute-Setup-3.6.0.exe` | Offline installer with the per-app engine |
-| `PerRoute-Portable-3.6.0.zip` | Self-contained portable build |
-| `PerRoute-Browser-3.6.0.zip` | The browser runtime and extension (embedded in the installer) |
-| `PerRoute-3.6.0/` | Unpacked application image |
+| `PerRoute-Setup-3.7.0.exe` | Offline installer with the per-app engine |
+| `PerRoute-Portable-3.7.0.zip` | Self-contained portable build |
+| `PerRoute-Browser-3.7.0.zip` | The browser runtime and extension (embedded in the installer) |
+| `PerRoute-3.7.0/` | Unpacked application image |
 
 The installer dependencies are downloaded on first use and verified against pinned SHA-256 digests. Building the browser extension also needs Node.js and Rust; see [browser/README.md](browser/README.md).
 
@@ -548,13 +545,13 @@ docs/screenshots/                      Images used in this document
 Updates are distributed as a signed manifest next to the installer. Keep the private key outside the repository.
 
 ```powershell
-java tools\update\UpdateManifestTool.java sign 3.6.0 dist\PerRoute-Setup-3.6.0.exe https://github.com/AliMirzad/PerRoute/releases/download/v3.6.0/PerRoute-Setup-3.6.0.exe release-secrets\perroute-update-private.pk8 dist\update.json
+java tools\update\UpdateManifestTool.java sign 3.7.0 dist\PerRoute-Setup-3.7.0.exe https://github.com/0xVexor/PerRoute/releases/download/v3.7.0/PerRoute-Setup-3.7.0.exe release-secrets\perroute-update-private.pk8 dist\update.json
 ```
 
 Attach `update.json` to **every** release. PerRoute reads it from the latest release by itself, at this address (built in as the default feed):
 
 ```
-https://github.com/AliMirzad/PerRoute/releases/latest/download/update.json
+https://github.com/0xVexor/PerRoute/releases/latest/download/update.json
 ```
 
 A release without `update.json` makes the update check fail for everyone until one is attached.
@@ -599,7 +596,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
 PerRoute is free software, released under the [GNU General Public License v3.0](LICENSE). You may use, study, share and modify it; distributed modifications must remain under the same license and include their source.
 
-Copyright © 2026 Ali Mirzad.
+Copyright © 2026 PerRoute.
 
 The bundled third-party components listed above are separate works under their own licenses.
 
@@ -609,4 +606,31 @@ PerRoute is a network client. You are responsible for using it in accordance wit
 
 ## Author
 
-Created By **Vexor** · [github.com/AliMirzad](https://github.com/AliMirzad)
+Created By **Vexor** · [github.com/0xVexor](https://github.com/0xVexor)
+
+
+## Automated release builds
+
+`appVersion` in `gradle.properties` is the desktop version source for both platforms.
+The app display, Compose image, Windows installer/recovery/uninstaller and release
+filenames derive their version from it. Full Git history supplies the deterministic
+commit count and source revision.
+
+The Installers and release builds workflow builds Windows x64 and macOS arm64 on
+pushes to `main` or `build/**`. A matching `vX.Y.Z` tag publishes a GitHub release
+only after both platforms pass their checks. It verifies common version, source
+revision, build number and asset hashes before publication, then includes SHA256SUMS.
+The workflow keeps the previous latest release until a signed update manifest is
+available, so publishing manual downloads does not break existing update checks.
+Never move an already published release tag to rebuild different source.
+
+The macOS job requires the `MACOS_SIGNING_STATE` Actions secret for helper-enabled
+packages. It contains the persistent local preview identity, not an Apple Developer
+ID. Without that secret, ordinary branch/PR runs compile the app image; tag runs
+fail rather than generating an incompatible replacement identity. Signing secrets
+are unavailable to fork PRs. Do not install a preview with a different helper
+identity over an existing installation without the documented recovery procedure.
+
+A GitHub release does not create an authenticated automatic-update manifest.
+Publishing `update.json` still requires the existing Ed25519 release key and the
+signing command above. The updater continues to reject unsigned manifests.
