@@ -15,7 +15,7 @@ A Windows and macOS desktop client for VLESS, VMess, Trojan and Shadowsocks, bui
 ![Core](https://img.shields.io/badge/core-Xray-0B9B83)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
-[Download](#download) · [macOS](#macos-version) · [What's new](#whats-new-in-360) · [Features](#features) · [Tour](#tour) · [Speed](#speed) · [Build from source](#build-from-source)
+[Download](#download) · [macOS](#macos-version) · [What's new](#whats-new-in-370) · [Features](#features) · [Tour](#tour) · [Speed](#speed) · [Build from source](#build-from-source)
 
 <img src="docs/screenshots/connection.png" width="820" alt="PerRoute connected in Smart per-app mode, one row per route">
 
@@ -110,7 +110,7 @@ Requires macOS 13 or newer. Apple Silicon is tested; Intel builds are untested. 
 | Smart per-app | Routes selected apps, including Chrome helpers, over IPv4 TCP. Unselected apps keep their direct connection. |
 | Local proxy | Provides local SOCKS5 and HTTP proxies for apps you configure manually. |
 
-Per-app limitations: the separate Safari test build includes responsible-process attribution for IPv4 TCP, pending installed isolation acceptance; UDP/QUIC, IPv6 and a kill switch are unsupported. DNS leak protection and ECH support are not guaranteed. Windows-only tools are hidden or disabled. The browser extension is separate and is not bundled in the DMG.
+Per-app routing covers IPv4 TCP, including Safari responsible-process attribution; UDP/QUIC, IPv6 and a kill switch are unsupported. DNS leak protection and ECH support are not guaranteed. Windows-only tools are hidden or disabled. The browser extension is separate and is not bundled in the DMG.
 
 ### Install on macOS
 
