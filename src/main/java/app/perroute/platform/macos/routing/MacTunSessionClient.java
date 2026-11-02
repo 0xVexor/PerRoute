@@ -42,6 +42,11 @@ public final class MacTunSessionClient {
         client.request(allowSetup ? "prepare" : "prepare-existing", Map.of());
         interrupted();
         if (!available()) throw new IOException("Install the matching signed PerRoute helper, routing engine and Xray bundle before using per-app mode.");
+        if (selected.stream().anyMatch(binding -> binding.scope() == MacPerAppRoutingPlan.Scope.SAFARI_APPLICATION)) {
+            var capabilities = client.request("tun-capabilities", Map.of());
+            if (!(capabilities.get("safariProtocol") instanceof Number protocol) || protocol.intValue() != 1)
+                throw new IOException("Safari routing requires the matching Safari-enabled app, helper and engine. Install the new PKG before connecting.");
+        }
         stop();
         if (!pendingRecovery()) PrivateStateFiles.write(recoveryMarker, new byte[]{1});
         try {

@@ -46,6 +46,7 @@ public final class AllTests {
     private static int assertions;
 
     public static void main(String[] args) throws Exception {
+        run("Host fixture identity contracts", AllTests::testFixtureIdentityContracts);
         run("VLESS parsing", AllTests::testVless);
         run("VMess parsing", AllTests::testVmess);
         run("Trojan parsing", AllTests::testTrojan);
@@ -59,7 +60,8 @@ public final class AllTests {
         run("Local proxy config", AllTests::testApplicationProxyConfig);
         run("Per-app rules", AllTests::testPerAppRoutingRules);
         run("Launch plans", AllTests::testAppProxyLaunchPlans);
-        run("Native per-app config", AllTests::testNativePerAppConfig);
+        if (RegressionFixtures.windows()) run("Windows native per-app config", AllTests::testNativePerAppConfig);
+        else System.out.println("[skip] Windows-only ProxiFyre package-directory config; covered by Windows CI");
         run("Tunnel health check", AllTests::testProxyHealthCheck);
         run("Latency probe", AllTests::testServerLatencyProbe);
         run("Application discovery", AllTests::testApplicationDiscoveryDeduplication);
@@ -110,6 +112,27 @@ public final class AllTests {
     private static void run(String name, CheckedTest test) throws Exception {
         System.out.println("[test] " + name);
         test.run();
+    }
+
+    private static void testFixtureIdentityContracts() throws Exception {
+        Path directory = Files.createTempDirectory("perroute-fixture-contract-");
+        try {
+            Path file = Files.writeString(directory.resolve("MixedCase.exe"), "fixture");
+            String identity = RegressionFixtures.identity(file);
+            check(app.perroute.backup.BackupService.executableExists(identity), "Fixture identity resolves the real host file");
+            String key = app.perroute.model.AppRoutes.normalize(identity);
+            equal(key, app.perroute.model.AppRoutes.normalize(key));
+            if (RegressionFixtures.windows()) {
+                equal("c:\\apps\\chrome.exe", app.perroute.model.AppRoutes.normalize("C:/Apps/../Apps/CHROME.EXE"));
+                equal(app.perroute.model.AppRoutes.normalize("C:\\Apps\\Chrome.exe"),
+                        app.perroute.model.AppRoutes.normalize("c:/apps/CHROME.exe"));
+            } else {
+                equal("macos-executable:" + file.toRealPath(), identity);
+                equal(identity, key);
+                String otherCase = identity.replace("MixedCase.exe", "mixedcase.exe");
+                check(!key.equals(app.perroute.model.AppRoutes.normalize(otherCase)), "Tagged identities retain executable case");
+            }
+        } finally { removeTemporaryDirectory(directory); }
     }
 
     private static void testVless() {
@@ -239,7 +262,7 @@ public final class AllTests {
     @SuppressWarnings("unchecked")
     private static void testConfigIncludeMode() {
         ProxyNode node = new ShareLinkParser().parse("vless://id@example.com:443?type=ws&security=tls&sni=example.com&path=%2Fx#One");
-        String config = new XrayConfigGenerator().generate(node, List.of("C:\\Apps\\Browser.exe"), RoutingMode.INCLUDE_SELECTED);
+        String config = new XrayConfigGenerator().generate(node, List.of(Path.of("C:/Apps/Browser.exe").toString()), RoutingMode.INCLUDE_SELECTED);
         Map<String, Object> root = Json.object(config);
         List<Object> outbounds = (List<Object>) root.get("outbounds");
         equal("vless", ((Map<String, Object>)outbounds.get(0)).get("protocol"));
@@ -297,25 +320,25 @@ public final class AllTests {
     private static void testAppProxyLaunchPlans() throws Exception {
         AppProxyLauncher launcher = new AppProxyLauncher();
 
-        AppProxyLauncher.LaunchPlan chrome = launcher.plan("C:\\Apps\\chrome.exe");
+        AppProxyLauncher.LaunchPlan chrome = launcher.plan(Path.of("C:/Apps/chrome.exe").toString());
         equal(AppProxyLauncher.Adapter.CHROMIUM, chrome.compatibility().adapter());
         check(chrome.command().stream().anyMatch(value -> value.startsWith("--proxy-server=http://127.0.0.1:")),
                 "Chromium apps must receive their native proxy switch");
         check(!chrome.environment().containsKey("JAVA_TOOL_OPTIONS"),
                 "Chromium apps must not receive JVM-only settings");
 
-        AppProxyLauncher.LaunchPlan idea = launcher.plan("C:\\Apps\\idea64.exe");
+        AppProxyLauncher.LaunchPlan idea = launcher.plan(Path.of("C:/Apps/idea64.exe").toString());
         equal(AppProxyLauncher.Adapter.JETBRAINS, idea.compatibility().adapter());
         equal(1, idea.command().size());
         check(idea.environment().get("JAVA_TOOL_OPTIONS").contains("https.proxyHost=127.0.0.1"),
                 "JetBrains apps must receive JVM proxy properties");
 
-        AppProxyLauncher.LaunchPlan generic = launcher.plan("C:\\Apps\\proxy-aware.exe");
+        AppProxyLauncher.LaunchPlan generic = launcher.plan(Path.of("C:/Apps/proxy-aware.exe").toString());
         equal(AppProxyLauncher.Adapter.ENVIRONMENT, generic.compatibility().adapter());
         check(generic.environment().containsKey("HTTP_PROXY") && generic.environment().containsKey("ALL_PROXY"),
                 "Generic proxy-aware apps must receive standard proxy environment variables");
 
-        check(!launcher.compatibility("C:\\Apps\\firefox.exe").supported(),
+        check(!launcher.compatibility(Path.of("C:/Apps/firefox.exe").toString()).supported(),
                 "Known apps that ignore per-launch proxy settings must be rejected");
     }
 
@@ -600,9 +623,9 @@ public final class AllTests {
         equal("hi", new String(input.readAllBytes(), StandardCharsets.US_ASCII));
     }
 
-    private static final String CHROME = "C:\\Apps\\Chrome.exe";
-    private static final String TELEGRAM = "C:\\Apps\\Telegram.exe";
-    private static final String DISCORD = "C:\\Apps\\Discord.exe";
+    private static final String CHROME = RegressionFixtures.application("C:\\Apps\\Chrome.exe");
+    private static final String TELEGRAM = RegressionFixtures.application("C:\\Apps\\Telegram.exe");
+    private static final String DISCORD = RegressionFixtures.application("C:\\Apps\\Discord.exe");
 
     private static ProxyNode server(String key, String host) {
         return new ProxyNode(key, host, Protocol.VLESS, host, 443, "id-" + key, Map.of("security", "tls"), "");
@@ -682,22 +705,23 @@ public final class AllTests {
         state.appRoutes().put(app.perroute.model.AppRoutes.normalize(CHROME), custom.key());
         state.appRouteLabels().put(custom.key(), "Custom server");
         state.profiles().add(new ConnectionProfile("p", "Office", List.of(CHROME), main.key(),
-                ConnectionMode.NATIVE_PER_APP, List.of(), true, Map.of("C:/Apps/CHROME.exe", custom.key())));
+                ConnectionMode.NATIVE_PER_APP, List.of(), true, Map.of(RegressionFixtures.windows() ? "C:/Apps/CHROME.exe" : CHROME, custom.key())));
         store.save(state);
 
         AppState restored = store.load();
         check(restored.advancedRouting(), "The Advanced flag must survive a restart");
-        equal(Map.of("c:\\apps\\chrome.exe", "custom"), restored.appRoutes());
+        equal(Map.of(RegressionFixtures.windows() ? "c:\\apps\\chrome.exe" : CHROME, "custom"), restored.appRoutes());
         equal("Custom server", restored.appRouteLabels().get("custom"));
         check(restored.profiles().get(0).advancedRouting(), "Profiles must store the Advanced flag");
-        equal(Map.of("c:\\apps\\chrome.exe", "custom"), restored.profiles().get(0).appRoutes());
-        equal("c:\\apps\\chrome.exe", app.perroute.model.AppRoutes.normalize("C:/Apps/../Apps/CHROME.EXE"));
+        equal(Map.of(RegressionFixtures.windows() ? "c:\\apps\\chrome.exe" : CHROME, "custom"), restored.profiles().get(0).appRoutes());
+        if (RegressionFixtures.windows()) equal("c:\\apps\\chrome.exe", app.perroute.model.AppRoutes.normalize("C:/Apps/../Apps/CHROME.EXE"));
+        else equal(CHROME, app.perroute.model.AppRoutes.normalize(CHROME));
 
         restored.setAdvancedRouting(false);
         store.save(restored);
         AppState disabled = store.load();
         check(!disabled.advancedRouting(), "Advanced routing must be saved as off");
-        equal(Map.of("c:\\apps\\chrome.exe", "custom"), disabled.appRoutes());
+        equal(Map.of(RegressionFixtures.windows() ? "c:\\apps\\chrome.exe" : CHROME, "custom"), disabled.appRoutes());
         removeTemporaryDirectory(directory);
     }
 
@@ -707,7 +731,7 @@ public final class AllTests {
         ProxyNode profile = embeddedProfile("profile");
         List<ProxyNode> nodes = List.of(main, second, profile);
         List<String> apps = List.of(CHROME, TELEGRAM, DISCORD);
-        Map<String, String> routes = Map.of("c:\\apps\\chrome.exe", "second", "c:\\apps\\discord.exe", "main");
+        Map<String, String> routes = Map.of(app.perroute.model.AppRoutes.normalize(CHROME), "second", app.perroute.model.AppRoutes.normalize(DISCORD), "main");
 
         var off = app.perroute.service.RoutePlanner.plan(nodes, "main", apps, false, routes, Map.of(), ConnectionMode.NATIVE_PER_APP);
         check(!off.advancedEffective() && off.ready(), "Advanced off must ignore every assignment");
@@ -718,7 +742,7 @@ public final class AllTests {
         var on = app.perroute.service.RoutePlanner.plan(nodes, "main", apps, true, routes, Map.of(), ConnectionMode.NATIVE_PER_APP);
         check(on.advancedEffective() && on.ready(), "Valid assignments must be ready");
         equal(2, on.routes().size());
-        equal(second, on.nodeFor("c:/apps/CHROME.exe"));
+        equal(second, on.nodeFor(RegressionFixtures.windows() ? "c:/apps/CHROME.exe" : CHROME));
         equal(main, on.nodeFor(TELEGRAM));
         equal(main, on.nodeFor(DISCORD));
         equal(List.of(TELEGRAM, DISCORD), on.routes().get(0).applications());
@@ -737,7 +761,7 @@ public final class AllTests {
         equal(second, followsNewMain.nodeFor(TELEGRAM));
         equal(List.of(CHROME, TELEGRAM), followsNewMain.routes().get(0).applications());
 
-        Map<String, String> dangling = Map.of("c:\\apps\\chrome.exe", "gone", "c:\\apps\\telegram.exe", "profile");
+        Map<String, String> dangling = Map.of(app.perroute.model.AppRoutes.normalize(CHROME), "gone", app.perroute.model.AppRoutes.normalize(TELEGRAM), "profile");
         var missing = app.perroute.service.RoutePlanner.plan(nodes, "main", apps, true, dangling, Map.of("gone", "Old server"), ConnectionMode.NATIVE_PER_APP);
         check(!missing.ready(), "An effective assignment to a removed server must block");
         equal(1, missing.missing().size());
@@ -1004,7 +1028,7 @@ public final class AllTests {
         equal(CHROME, all.todayApplications().get(0).applicationPath());
         equal(1, all.days().size());
         equal(5000L, all.days().get(0).downloadBytes());
-        var one = store.report("c:\\apps\\telegram.exe");
+        var one = store.report(app.perroute.model.AppRoutes.normalize(TELEGRAM));
         equal(1000L, one.todayDownloadBytes());
         equal(100L, one.monthUploadBytes());
         equal(1000L, one.days().get(0).downloadBytes());

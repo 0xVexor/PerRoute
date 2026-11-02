@@ -26,8 +26,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 public final class SecureUpdateService {
-    public static final String CURRENT_VERSION = "3.6.0";
-    public static final String OFFICIAL_FEED = "https://github.com/AliMirzad/PerRoute/releases/latest/download/update.json";
+    public static final String CURRENT_VERSION = BuildIdentity.version();
+    public static final String OFFICIAL_FEED = "https://github.com/0xVexor/PerRoute/releases/latest/download/update.json";
     private static final String UPDATE_PUBLIC_KEY =
             "MCowBQYDK2VwAyEAJHclwauxFVQNKkuskeYcPWLr4eSC9emFIsm5fLqkiVw=";
     private static final int MAX_MANIFEST_BYTES = 64 * 1024;

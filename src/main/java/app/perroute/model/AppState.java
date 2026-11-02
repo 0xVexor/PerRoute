@@ -23,6 +23,7 @@ public final class AppState {
     private final Map<String, String> autoPools = new LinkedHashMap<>();
     private final Map<String, app.perroute.routing.AutoSelection> autoSelections = new LinkedHashMap<>();
     private final Map<String, BandwidthPolicy> bandwidthPolicies = new LinkedHashMap<>();
+    private final Map<String, String> applicationHistoryAliases = new LinkedHashMap<>();
     private String activeProfileId = "";
     private ConnectionMode connectionMode = ConnectionMode.SYSTEM_PROXY;
     private RoutingMode routingMode = RoutingMode.INCLUDE_SELECTED;
@@ -55,6 +56,7 @@ public final class AppState {
     public Map<String, String> autoPools() { return autoPools; }
     public Map<String, app.perroute.routing.AutoSelection> autoSelections() { return autoSelections; }
     public Map<String, BandwidthPolicy> bandwidthPolicies() { return bandwidthPolicies; }
+    public Map<String, String> applicationHistoryAliases() { return applicationHistoryAliases; }
     public boolean migratedFromV2() { return migratedFromV2; }
     public void setMigratedFromV2(boolean value) { migratedFromV2 = value; }
 
@@ -74,6 +76,7 @@ public final class AppState {
         autoPools.clear(); autoPools.putAll(other.autoPools);
         autoSelections.clear(); autoSelections.putAll(other.autoSelections);
         bandwidthPolicies.clear(); bandwidthPolicies.putAll(other.bandwidthPolicies);
+        applicationHistoryAliases.clear(); applicationHistoryAliases.putAll(other.applicationHistoryAliases);
         activeProfileId = other.activeProfileId;
         connectionMode = other.connectionMode;
         routingMode = other.routingMode;

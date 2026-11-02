@@ -11,6 +11,15 @@ static NSURL *CanonicalURL(NSURL *url) {
     return [NSURL fileURLWithPath:path];
 }
 
+static BOOL DeclaredBoolean(id value) {
+    if ([value isKindOfClass:NSNumber.class]) return [value boolValue];
+    if (![value isKindOfClass:NSString.class]) return NO;
+    // Chromium ships LSUIElement as the legacy string "1". Accept explicit
+    // boolean spellings only; arbitrary nonempty strings must not imply helper role.
+    NSString *flag = [value lowercaseString];
+    return [flag isEqualToString:@"1"] || [flag isEqualToString:@"true"] || [flag isEqualToString:@"yes"];
+}
+
 static NSDictionary *Application(NSURL *url) {
     url = CanonicalURL(url);
     if (!url) return nil;
@@ -39,13 +48,17 @@ static NSDictionary *Application(NSURL *url) {
     if (info) CFRelease(info);
     if (code) CFRelease(code);
     // Paths identify catalog entries only. Signing metadata is observational, not routing authority.
+    id uiElement = [bundle objectForInfoDictionaryKey:@"LSUIElement"];
+    id backgroundOnly = [bundle objectForInfoDictionaryKey:@"LSBackgroundOnly"];
+    BOOL helper = DeclaredBoolean(uiElement) || DeclaredBoolean(backgroundOnly);
     return @{@"name": name, @"bundlePath": url.path,
         @"executablePath": executable.path, @"bundleIdentifier": identifier,
-        @"teamIdentifier": team, @"signingIdentifier": signingIdentifier, @"signatureValid": @(valid)};
+        @"teamIdentifier": team, @"signingIdentifier": signingIdentifier, @"signatureValid": @(valid), @"backgroundHelper": @(helper)};
 }
 
 // A browser's network owner may be a nested helper rather than its main executable.
-// Discover candidates only; each returned exact path still requires explicit selection.
+// Discovery is observational. Grouping additionally checks background role and signing metadata;
+// routing still revalidates the exact executable paths at Connect.
 static void AddApplicationFamilyLimited(NSURL *url, NSMutableDictionary *entries, NSMutableArray *warnings, NSUInteger limit) {
     NSDictionary *main = Application(url);
     if (!main) return;

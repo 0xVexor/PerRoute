@@ -78,6 +78,7 @@ public final class BackupService {
         final Set<String> autoApps = new LinkedHashSet<>();
         final Map<String, String> autoPools = new LinkedHashMap<>();
         final Map<String, BandwidthPolicy> bandwidth = new LinkedHashMap<>();
+        final Map<String, String> historyAliases = new LinkedHashMap<>();
         final List<RouteRule> rules = new ArrayList<>();
         final List<ConnectionProfile> profiles = new ArrayList<>();
         String activeProfile = "";
@@ -123,6 +124,7 @@ public final class BackupService {
             apps.put("routeLabels", new LinkedHashMap<>(state.appRouteLabels()));
             apps.put("auto", new ArrayList<>(state.autoApps()));
             apps.put("pools", new LinkedHashMap<>(state.autoPools()));
+            apps.put("historyAliases", new LinkedHashMap<>(state.applicationHistoryAliases()));
             Map<String, Object> limits = new LinkedHashMap<>();
             state.bandwidthPolicies().forEach((app, policy) -> limits.put(app, policy.encode()));
             apps.put("bandwidth", limits);
@@ -193,6 +195,7 @@ public final class BackupService {
         payload.applications.forEach(path -> seen.putIfAbsent(AppRoutes.normalize(path), path));
         payload.routes.keySet().forEach(path -> seen.putIfAbsent(AppRoutes.normalize(path), path));
         payload.autoApps.forEach(path -> seen.putIfAbsent(AppRoutes.normalize(path), path));
+        payload.autoPools.keySet().forEach(path -> seen.putIfAbsent(AppRoutes.normalize(path), path));
         payload.bandwidth.keySet().forEach(path -> seen.putIfAbsent(AppRoutes.normalize(path), path));
         payload.rules.stream().map(RouteRule::applicationPath).filter(path -> !path.isBlank())
                 .forEach(path -> seen.putIfAbsent(AppRoutes.normalize(path), path));
@@ -276,6 +279,7 @@ public final class BackupService {
                 state.appPaths().clear(); state.appRoutes().clear(); state.appRouteLabels().clear();
                 state.autoApps().clear(); state.autoPools().clear(); state.autoSelections().clear();
                 state.bandwidthPolicies().clear();
+                state.applicationHistoryAliases().clear();
                 state.setAdvancedRouting(payload.advanced);
             }
             Set<String> alreadyRouted = new HashSet<>(state.appRoutes().keySet());
@@ -311,6 +315,19 @@ public final class BackupService {
                 String app = AppRoutes.normalize(mapped);
                 if (replace || !state.bandwidthPolicies().containsKey(app)) state.bandwidthPolicies().put(app, policy);
             });
+            payload.autoPools.forEach((path, pool) -> {
+                String mapped = mapPath.apply(path);
+                if (mapped != null && (replace || !state.autoPools().containsKey(AppRoutes.normalize(mapped))))
+                    state.autoPools().put(AppRoutes.normalize(mapped), AutoCandidatePool.decode(pool).encode());
+            });
+            payload.historyAliases.forEach((source, target) -> {
+                String mapped = mapPath.apply(target);
+                if (mapped != null && ApplicationIdentity.isMac(mapped) && !source.equals(mapped) &&
+                        (replace || !state.applicationHistoryAliases().containsKey(source)))
+                    state.applicationHistoryAliases().put(source, mapped);
+            });
+            state.applicationHistoryAliases().keySet().forEach(identity ->
+                    app.perroute.model.ApplicationSetupMigration.historyIdentity(identity, state.applicationHistoryAliases()));
             summary.add((replace ? "Restored " : "Added ") + apps + " apps with their routing and limits.");
         }
 
@@ -423,6 +440,12 @@ public final class BackupService {
             payload.routeLabels.putAll(stringMap(apps.get("routeLabels")));
             strings(apps.get("auto")).stream().filter(path -> !path.isBlank()).forEach(payload.autoApps::add);
             payload.autoPools.putAll(stringMap(apps.get("pools")));
+            stringMap(apps.get("historyAliases")).forEach((source, target) -> {
+                if (ApplicationIdentity.isMac(source) && ApplicationIdentity.isMac(target)) {
+                    ApplicationIdentity.path(source); ApplicationIdentity.path(target);
+                    if (!source.equals(target)) payload.historyAliases.put(source, target);
+                }
+            });
             stringMap(apps.get("bandwidth")).forEach((app, limit) -> {
                 BandwidthPolicy policy = BandwidthPolicy.decode(limit);
                 if (!app.isBlank() && !policy.unlimited()) payload.bandwidth.put(app, policy);

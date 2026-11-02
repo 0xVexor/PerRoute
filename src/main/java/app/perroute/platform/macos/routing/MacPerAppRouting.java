@@ -18,6 +18,9 @@ public final class MacPerAppRouting {
     private List<ExecutableRoute> bindings = List.of();
     private List<AppGateway.Route> routes = List.of();
     private List<String> selected = List.of();
+    public synchronized long safariBindingCount() {
+        return bindings.stream().filter(binding -> binding.scope() == MacPerAppRoutingPlan.Scope.SAFARI_APPLICATION).count();
+    }
 
     public MacPerAppRouting(MacTunSessionClient session, AppGateway gateway) {
         this(session, gateway, new app.perroute.platform.macos.MacApplicationFamilies(

@@ -1,6 +1,5 @@
 package app.perroute.platform.macos;
 
-import app.perroute.backend.api.ApplicationDescriptor;
 import app.perroute.gateway.AppGateway;
 import app.perroute.model.ApplicationIdentity;
 import app.perroute.platform.macos.routing.MacPerAppRoutingPlan.ExecutableRoute;
@@ -14,18 +13,6 @@ public final class MacApplicationFamilies {
     private final MacApplicationCatalog catalog;
     public MacApplicationFamilies(MacApplicationCatalog catalog) { this.catalog = Objects.requireNonNull(catalog); }
 
-    public static List<ApplicationDescriptor> descriptors(MacApplicationCatalog.Snapshot snapshot) throws IOException {
-        requireComplete(snapshot);
-        var result = new ArrayList<ApplicationDescriptor>();
-        for (var app : snapshot.applications()) {
-            result.add(new ApplicationDescriptor(app.name(), ApplicationIdentity.macExecutable(app.executablePath().toString())));
-            if (outermost(app, snapshot) && members(app, snapshot).size() > 1)
-                result.add(new ApplicationDescriptor(app.name() + " (including helpers)",
-                        ApplicationIdentity.macAppFamily(app.executablePath().toString())));
-        }
-        return List.copyOf(result);
-    }
-
     public String validateSelection(String identity) throws IOException {
         if (!ApplicationIdentity.isMacFamily(identity)) throw new IOException("Expected an explicit application family");
         var snapshot = catalog.installed();
@@ -36,11 +23,8 @@ public final class MacApplicationFamilies {
 
     public List<ExecutableRoute> bindings(List<AppGateway.Route> routes) throws IOException {
         // Read once so every family in this connection uses the same complete inventory.
-        MacApplicationCatalog.Snapshot snapshot = null;
-        if (routes.stream().anyMatch(route -> ApplicationIdentity.isMacFamily(route.applicationPath()))) {
-            snapshot = catalog.installed();
-            requireComplete(snapshot);
-        }
+        MacApplicationCatalog.Snapshot snapshot = catalog.installed();
+        requireComplete(snapshot);
         var result = new ArrayList<ExecutableRoute>();
         var owners = new HashMap<String, String>();
         for (var route : routes) {
@@ -51,7 +35,14 @@ public final class MacApplicationFamilies {
             for (String path : paths) {
                 if (owners.putIfAbsent(path, identity) != null)
                     throw new IOException("Application selections overlap. Select either an app including helpers or its individual executables.");
-                result.add(new ExecutableRoute(path, route.listenPort()));
+                // Catalog metadata requests the scope; the native helper and engine
+                // independently require the actual Apple Safari signing identity.
+                boolean safari = snapshot.applications().stream().anyMatch(app ->
+                        app.executablePath().toString().equals(path) && app.signatureValid() &&
+                        "com.apple.Safari".equals(app.bundleIdentifier()) && "com.apple.Safari".equals(app.signingIdentifier()));
+                result.add(new ExecutableRoute(path, route.listenPort(), safari
+                        ? app.perroute.platform.macos.routing.MacPerAppRoutingPlan.Scope.SAFARI_APPLICATION
+                        : app.perroute.platform.macos.routing.MacPerAppRoutingPlan.Scope.EXECUTABLE));
                 if (result.size() > 256) throw new IOException("The selection includes more than 256 executable paths. Select fewer apps or individual helpers.");
             }
         }
@@ -66,7 +57,10 @@ public final class MacApplicationFamilies {
         Path bundle = app.bundlePath();
         if (!bundle.equals(bundle.toRealPath())) throw new IOException("The application's bundle path changed. Select it again.");
         var paths = new TreeSet<String>();
-        for (var member : members(app, snapshot)) {
+        var group = MacApplicationGroups.installed(snapshot).stream()
+                .filter(candidate -> candidate.application().equals(app)).findFirst()
+                .orElseThrow(() -> new IOException("Refresh and select the outer application again."));
+        for (var member : group.members()) {
             if (!member.bundlePath().equals(member.bundlePath().toRealPath()))
                 throw new IOException("A helper bundle path changed. Refresh and select the application again.");
             String path = executable(member.executablePath());
@@ -84,10 +78,6 @@ public final class MacApplicationFamilies {
     private static boolean outermost(MacApplicationCatalog.Application app, MacApplicationCatalog.Snapshot snapshot) {
         return snapshot.applications().stream().noneMatch(other -> !other.bundlePath().equals(app.bundlePath()) &&
                 app.bundlePath().startsWith(other.bundlePath().resolve("Contents")));
-    }
-    private static List<MacApplicationCatalog.Application> members(MacApplicationCatalog.Application app, MacApplicationCatalog.Snapshot snapshot) {
-        return snapshot.applications().stream().filter(candidate -> candidate.bundlePath().equals(app.bundlePath()) ||
-                candidate.bundlePath().startsWith(app.bundlePath().resolve("Contents"))).toList();
     }
     private static void requireComplete(MacApplicationCatalog.Snapshot snapshot) throws IOException {
         if (!snapshot.warnings().isEmpty()) throw new IOException("Application discovery is incomplete. Refresh the application list before connecting.");

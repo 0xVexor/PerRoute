@@ -101,7 +101,7 @@ private fun NewTitleBar(chrome: WindowChrome) {
                     Spacer(Modifier.width(11.dp))
                     Text("PerRoute", color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
-                    Text(app.perroute.service.SecureUpdateService.CURRENT_VERSION, color = White.copy(.82f), fontSize = 12.sp)
+                    Text(app.perroute.service.BuildIdentity.displayVersion(), color = White.copy(.82f), fontSize = 12.sp)
                     Spacer(Modifier.width(20.dp))
                 }
             }

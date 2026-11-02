@@ -3,6 +3,8 @@
 #import "../macos-tun/TunNetwork.h"
 #import "../macos-tun/TunPolicy.h"
 #import <libproc.h>
+#import <dlfcn.h>
+#import <os/log.h>
 #import <SystemConfiguration/SystemConfiguration.h>
 #import <unistd.h>
 static NSString *const Engine = @"/Applications/PerRoute.app/Contents/Library/Engines/sing-box";
@@ -10,11 +12,18 @@ static NSString *const Gateway = @"/Applications/PerRoute.app/Contents/MacOS/Per
 static NSArray *CorePaths(void) { return @[@"/Applications/PerRoute.app/Contents/app/resources/xray/macos-arm64/xray",
     @"/Applications/PerRoute.app/Contents/app/resources/xray/macos-x64/xray"]; }
 static id Reject(NSError **error, NSString *message) { if (error) *error = PRError(message); return nil; }
+static NSString *EngineIdentity(NSString *team) {
+    NSString *safari = @"app.perroute.tun-engine.safari-v1";
+    return PRTunSigned(Engine,PRRequirement(safari,team)) ? safari : PRTunEngineIdentifier;
+}
 NSDictionary *PRTunCapabilities(NSString *team) {
     BOOL core = NO;
     for (NSString *path in CorePaths()) if (PRTunSigned(path,PRRequirement(PRXrayIdentifier,team))) core = YES;
-    BOOL payload = core && PRTunSigned(Engine,PRRequirement(PRTunEngineIdentifier,team));
-    return @{@"protocol":@1,@"endpointProtocol":@2,@"payloadAvailable":payload ? @YES : @NO,@"euid":@(geteuid())};
+    BOOL payload = core && PRTunSigned(Engine,PRRequirement(EngineIdentity(team),team));
+    BOOL safari = payload && [EngineIdentity(team) isEqual:@"app.perroute.tun-engine.safari-v1"] &&
+        dlsym(RTLD_DEFAULT,"responsibility_get_pid_responsible_for_pid") != NULL;
+    return @{@"protocol":@1,@"endpointProtocol":@2,@"safariProtocol":safari ? @1 : @0,
+        @"payloadAvailable":payload ? @YES : @NO,@"euid":@(geteuid())};
 }
 NSDictionary *PRStartTun(NSDictionary *request, uid_t uid, NSXPCConnection *connection,
     NSString *team, PRTunStore *store, PRTunAuthority *authority, NSError **error) {
@@ -30,6 +39,15 @@ NSDictionary *PRStartTun(NSDictionary *request, uid_t uid, NSXPCConnection *conn
     // Validate every binding before reading it as executable/port authority.
     if (!PRTunPrepareConfiguration(preparation,[CorePaths() arrayByAddingObject:Gateway],error)) return nil;
     if (![PRTunCapabilities(team)[@"payloadAvailable"] isEqual:@YES]) return Reject(error,@"Install the matching signed PerRoute routing engine and Xray bundle before using per-app mode");
+    for (NSDictionary *binding in request[@"bindings"]) {
+        if ([binding[@"scope"] isEqual:@"safari-application"]) {
+            if (![PRTunCapabilities(team)[@"safariProtocol"] isEqual:@1] ||
+                !PRTunSigned(binding[@"executable"],@"anchor apple and identifier \"com.apple.Safari\""))
+                return Reject(error,@"Safari attribution is unavailable or the selected executable is not Apple-signed Safari");
+            os_log_t log = os_log_create("app.perroute.safari","helper");
+            os_log_info(log,"Safari scope accepted: IPv4 TCP, uid=%u; no global WebKit path rule",uid);
+        }
+    }
     NSMutableSet *ports = [NSMutableSet set];
     for (NSDictionary *binding in request[@"bindings"]) [ports addObject:binding[@"socksPort"]];
     NSSet *upstreamPorts = PRTunUpstreamPorts(request[@"upstreamPorts"],ports,error);
@@ -57,7 +75,7 @@ NSDictionary *PRStartTun(NSDictionary *request, uid_t uid, NSXPCConnection *conn
                 // All capture fields are native constants. The request never contains
                 // engine JSON, routes, DNS, interfaces, commands or payload locations.
                 return prepared;
-            } engineRequirement:PRRequirement(PRTunEngineIdentifier,team) workerRequirement:PRRequirement(PRHelperLabel,team) error:createError];
+            } engineRequirement:PRRequirement(EngineIdentity(team),team) workerRequirement:PRRequirement(PRHelperLabel,team) error:createError];
     } health:^BOOL(BOOL *ready, NSError **healthError) {
         uid_t console = 0;
         CFStringRef user = SCDynamicStoreCopyConsoleUser(NULL,&console,NULL);

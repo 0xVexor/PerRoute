@@ -108,6 +108,10 @@ public final class MacConnectionBackend implements ConnectionBackend, StartupRec
         if (perApp == null) throw unavailable("Per-app gateway");
         for (var route : routes) restoreApplication(route.applicationPath());
         perApp.startGateway(routes);
+        long safari = perApp.safariBindingCount();
+        logs.forEach(listener -> listener.accept("[Safari] " + app.perroute.service.BuildIdentity.displayVersion() +
+                "; selected_routes=" + routes.size() + "; safari_bindings=" + safari +
+                "; IPv4 TCP only; diagnostics subsystem=app.perroute.safari"));
     }
     @Override public void setGatewayLimits(String path, long down, long up) {
         if (perApp == null) throw unavailable("Per-app limits");
@@ -172,19 +176,25 @@ public final class MacConnectionBackend implements ConnectionBackend, StartupRec
         return resolved;
     }
     @Override public List<ApplicationDescriptor> installedApplications() {
-        return descriptors(catalog::installed);
+        try { return applicationGroups().stream().map(ApplicationGroup::application).toList(); }
+        catch (IOException failure) { throw new UncheckedIOException(failure); }
     }
     @Override public List<ApplicationDescriptor> runningApplications() {
-        return descriptors(catalog::running);
+        try { return MacApplicationGroups.running(catalog.installed(), catalog.running()).stream()
+                .map(MacApplicationGroups::descriptor).map(ApplicationGroup::application).toList(); }
+        catch (IOException failure) { throw new UncheckedIOException(failure); }
     }
-    private static List<ApplicationDescriptor> descriptors(CatalogRead source) {
-        try {
-            var snapshot = source.read();
-            if (!snapshot.warnings().isEmpty()) throw new java.io.IOException(String.join("; ", snapshot.warnings()));
-            return MacApplicationFamilies.descriptors(snapshot);
-        } catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
+    @Override public boolean supportsApplicationGrouping() { return true; }
+    @Override public List<ApplicationGroup> applicationGroups() throws IOException {
+        return MacApplicationGroups.installed(catalog.installed()).stream().map(MacApplicationGroups::descriptor).toList();
     }
-    @FunctionalInterface private interface CatalogRead { MacApplicationCatalog.Snapshot read() throws java.io.IOException; }
+    @Override public void validateApplicationSelection(List<String> identities) throws IOException {
+        if (identities.isEmpty()) return;
+        // Reuse exact-path expansion and overlap validation only. No gateway is started.
+        var routes = new java.util.ArrayList<AppGateway.Route>();
+        for (int i = 0; i < identities.size(); i++) routes.add(new AppGateway.Route(identities.get(i), i, 18001, 18002));
+        families.bindings(routes);
+    }
     @Override public void installCore(Consumer<String> progress) { throw unavailable("Core installation; supply a matching Darwin Xray binary"); }
     @Override public void installPerApp(Consumer<String> progress) { throw unavailable("Driver installation"); }
     @Override public UpdateDescriptor checkForUpdate(String feed) { throw unavailable("Automatic updates"); }

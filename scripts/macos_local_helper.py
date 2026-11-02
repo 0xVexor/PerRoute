@@ -3,6 +3,7 @@
 import argparse
 import json
 import platform
+import plistlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -43,45 +44,66 @@ def require_signing_state(state, installed_paths):
                          'or explicitly retire the installed app/helper before creating a new publisher identity.')
 
 
-def build(app, *, routing=False):
+def build(app, *, routing=False, skip_tests=False, signing_state=None, previous_helper_recovery=None, safari_engine=None, safari_source=None):
     output = ROOT / ("build/macos-routing-helper" if routing else "build/macos-local-helper")
-    require_signing_state(signing.STATE, [Path('/Applications/PerRoute.app'),
-                                        Path('/Library/PrivilegedHelperTools/app.perroute.proxy-helper'),
-                                        Path('/Library/LaunchDaemons/app.perroute.proxy-helper.plist')])
+    if signing_state is not None:
+        signing.STATE = Path(signing_state).absolute()
+    installed = [Path('/Applications/PerRoute.app'), Path('/Library/PrivilegedHelperTools/app.perroute.proxy-helper')]
+    if not signing.STATE.exists() and previous_helper_recovery is not None:
+        from macos_pkg import previous_recovery_pin, requirement
+        previous_pin = previous_recovery_pin(Path(previous_helper_recovery))
+        for path, identifier in zip(installed, ['app.perroute.spike', 'app.perroute.proxy-helper']):
+            if path.exists():
+                signing.run('/usr/bin/codesign', '--verify', '--deep', '--strict', '-R', requirement(identifier, previous_pin), path, quiet=True)
+        print('Explicit local certificate migration staged; installed app/helper are unchanged.')
+    else:
+        require_signing_state(signing.STATE, installed + [Path('/Library/LaunchDaemons/app.perroute.proxy-helper.plist')])
     if not signing.STATE.exists():
-        signing.create_identity()
+        signing.create_identity(signing.STATE)
     settings = signing.identity()
     signing.run('/usr/bin/security', 'unlock-keychain', '-p', settings['password'],
                 signing.STATE / 'identity.keychain-db', quiet=True)
     output.mkdir(parents=True, exist_ok=True)
-    policy = output / 'LocalPolicyTests'
-    compile_native(policy, ['ProxyJournal.m', 'PolicyTests.m'], settings, [])
-    signing.run(policy)
-    identity_test = output / 'LocalIdentityTests'
-    compile_native(identity_test, ['LocalIdentityTests.m'], settings, [])
-    signing.run(identity_test, 'app.perroute.spike', 'no')
-    seal(identity_test, settings, 'app.perroute.spike')
-    signing.run(identity_test, 'app.perroute.spike', 'yes')
-    signing.run(identity_test, 'app.perroute.proxy-helper', 'no')
-    seal(identity_test, settings, 'wrong.identifier')
-    signing.run(identity_test, 'app.perroute.spike', 'no')
-    with tempfile.TemporaryDirectory(prefix='perroute-local-foreign-') as temporary:
-        foreign = Path(temporary) / 'signing'
-        try:
-            signing.create_identity(foreign)
-            different = json.loads((foreign / 'identity.json').read_text())
-            signing.sign(identity_test, 'app.perroute.spike', different, keychain=foreign / 'identity.keychain-db')
-            signing.run(identity_test, 'app.perroute.spike', 'no')
-        finally:
-            if (foreign / 'identity.keychain-db').exists():
-                signing.run('/usr/bin/security', 'delete-keychain', foreign / 'identity.keychain-db', quiet=True)
-    print('Local identity: 5 real-signature checks passed; no service changes.')
+    if not skip_tests:
+        policy = output / 'LocalPolicyTests'
+        compile_native(policy, ['ProxyJournal.m', 'PolicyTests.m'], settings, [])
+        signing.run(policy)
+        identity_test = output / 'LocalIdentityTests'
+        compile_native(identity_test, ['LocalIdentityTests.m'], settings, [])
+        signing.run(identity_test, 'app.perroute.spike', 'no')
+        seal(identity_test, settings, 'app.perroute.spike')
+        signing.run(identity_test, 'app.perroute.spike', 'yes')
+        signing.run(identity_test, 'app.perroute.proxy-helper', 'no')
+        seal(identity_test, settings, 'wrong.identifier')
+        signing.run(identity_test, 'app.perroute.spike', 'no')
+        with tempfile.TemporaryDirectory(prefix='perroute-local-foreign-') as temporary:
+            foreign = Path(temporary) / 'signing'
+            try:
+                signing.create_identity(foreign)
+                different = json.loads((foreign / 'identity.json').read_text())
+                signing.sign(identity_test, 'app.perroute.spike', different, keychain=foreign / 'identity.keychain-db')
+                signing.run(identity_test, 'app.perroute.spike', 'no')
+            finally:
+                if (foreign / 'identity.keychain-db').exists():
+                    signing.run('/usr/bin/security', 'delete-keychain', foreign / 'identity.keychain-db', quiet=True)
+        print('Local identity: 5 real-signature checks passed; no service changes.')
     destination = output / 'PerRoute.app'
     # Build in disposable staging, so an interrupted build never leaves a partial install candidate.
     with tempfile.TemporaryDirectory(prefix='.local-', dir=output) as temporary:
         staged = Path(temporary) / 'PerRoute.app'
         shutil.copytree(app, staged, symlinks=True)
         contents = staged / 'Contents'
+        revision = signing.run('git', '-C', ROOT, 'rev-parse', 'HEAD', quiet=True).strip()
+        number = signing.run('git', '-C', ROOT, 'rev-list', '--count', 'HEAD', quiet=True).strip()
+        if signing.run('git', '-C', ROOT, 'rev-parse', '--is-shallow-repository', quiet=True).strip() != 'false':
+            raise SystemExit('Deterministic package build numbers require full Git history')
+        info_path = contents / 'Info.plist'
+        info = plistlib.loads(info_path.read_bytes())
+        info['CFBundleVersion'] = number
+        info_path.write_bytes(plistlib.dumps(info))
+        (contents / 'Resources/perroute-build.json').write_text(json.dumps({
+            'version':info['CFBundleShortVersionString'], 'buildNumber':number,
+            'sourceRevision':revision, 'buildId':f'b{number}-{revision[:12]}'}, indent=2) + '\n')
         # Remove unused platform payloads before signing, never from a sealed delivery app.
         resources = contents / 'app/resources'
         (resources / 'jnidispatch.dll').unlink(missing_ok=True)
@@ -102,7 +124,7 @@ def build(app, *, routing=False):
         # The local service is installed with fixed ProgramArguments. Never register the incompatible
         # SMAppService BundleProgram manifest from this account-free artifact.
         (contents / 'Library/LaunchDaemons/app.perroute.proxy-helper.plist').unlink(missing_ok=True)
-        routing_payloads = stage_routing(staged) if routing else ()
+        routing_payloads = stage_routing(staged, safari_engine=safari_engine, safari_source=safari_source) if routing else ()
         if routing:
             enable_candidate_launch(staged)
         runtime_executable = contents / 'runtime/Contents/MacOS/libjli.dylib'
@@ -110,11 +132,12 @@ def build(app, *, routing=False):
         for binary in staged.rglob('*'):
             if macho(binary) and binary not in (launcher, runtime_executable, helper, installer, *routing_payloads):
                 seal(binary, settings)
-        sign_payloads(routing_payloads, settings, seal, signing.run)
+        sign_payloads(routing_payloads, settings, seal, signing.run, safari=safari_engine is not None)
         # The administrator installer must be inert without elevation.
-        refused = subprocess.run([str(installer)], capture_output=True, text=True)
-        if refused.returncode != 78:
-            raise SystemExit('Unprivileged installer did not refuse execution')
+        if not skip_tests:
+            refused = subprocess.run([str(installer)], capture_output=True, text=True)
+            if refused.returncode != 78:
+                raise SystemExit('Unprivileged installer did not refuse execution')
         seal(helper, settings, 'app.perroute.proxy-helper')
         seal(installer, settings, 'app.perroute.proxy-installer')
         seal(contents / 'runtime', settings)
@@ -130,5 +153,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--routing', action='store_true', help='Include the pinned per-app engine in separate local staging')
+    parser.add_argument('--skip-tests', action='store_true', help='Compile and package only; skip executable test fixtures')
+    parser.add_argument('--signing-state', type=Path)
+    parser.add_argument('--previous-helper-recovery', type=Path, help='Explicit known-certificate migration; never retires installed components during building')
+    parser.add_argument('--safari-engine', type=Path)
+    parser.add_argument('--safari-source', type=Path)
     arguments = parser.parse_args()
-    build(arguments.app, routing=arguments.routing)
+    build(arguments.app, routing=arguments.routing, skip_tests=arguments.skip_tests,
+          signing_state=arguments.signing_state, previous_helper_recovery=arguments.previous_helper_recovery,
+          safari_engine=arguments.safari_engine, safari_source=arguments.safari_source)

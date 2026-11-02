@@ -60,9 +60,12 @@ NSData *PRTunPrepareConfiguration(NSData *request, NSArray<NSString *> *trustedE
         [excluded addObject:path];
     }
     NSMutableSet *selected = [NSMutableSet set];
+    NSMutableArray *safariBindings = [NSMutableArray array];
     NSMutableDictionary<NSNumber *, NSMutableArray *> *groups = [NSMutableDictionary dictionary];
     for (id binding in bindings) {
-        if (!Keys(binding, @[@"executable", @"socksPort"])) return Reject(error);
+        BOOL safari = Keys(binding, @[@"executable", @"socksPort", @"scope"]) &&
+            [binding[@"scope"] isEqual:@"safari-application"];
+        if (!safari && !Keys(binding, @[@"executable", @"socksPort"])) return Reject(error);
         NSString *path = Executable(binding[@"executable"]);
         id port = binding[@"socksPort"];
         if (!path || !Integer(port, 1, 65535) || [excluded containsObject:path] ||
@@ -71,6 +74,7 @@ NSData *PRTunPrepareConfiguration(NSData *request, NSArray<NSString *> *trustedE
         NSNumber *key = @([port integerValue]);
         if (!groups[key]) groups[key] = [NSMutableArray array];
         [groups[key] addObject:path];
+        if (safari) [safariBindings addObject:binding];
     }
     NSArray *exclusions = SortedPaths([excluded allObjects]);
     NSMutableArray *rules = [NSMutableArray arrayWithObject:
@@ -83,6 +87,11 @@ NSData *PRTunPrepareConfiguration(NSData *request, NSArray<NSString *> *trustedE
         [rules addObject:@{@"inbound": @[@"perroute-tun-spike"], @"network": @"tcp",
             @"process_path": SortedPaths(groups[port]),
             @"action": @"route", @"outbound": tag}];
+    }
+    for (NSDictionary *binding in safariBindings) {
+        [rules addObject:@{@"inbound":@[@"perroute-tun-spike"],@"network":@"tcp",
+            @"safari_responsible_path":binding[@"executable"],@"action":@"route",
+            @"outbound":[NSString stringWithFormat:@"xray-loopback-%ld",(long)[binding[@"socksPort"] integerValue]]}];
     }
     // No route/DNS/capture switch is caller-controlled. Actual activation, payload trust,
     // peer authentication and recovery must be implemented before exposing this through XPC.

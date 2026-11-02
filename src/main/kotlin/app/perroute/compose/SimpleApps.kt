@@ -63,6 +63,7 @@ internal fun SimpleAppsPage(shell: Shell) {
                 Spacer(Modifier.width(10.dp))
                 IconAction(Icons.Rounded.Refresh, "Refresh the application list", size = 44.dp) { model.refresh(true) }
             }
+            ApplicationGroupingControls(shell, model)
             val unresolved = model.unresolved()
             when {
                 locked -> { Spacer(Modifier.height(12.dp)); SimpleLockNote("Disconnect to change the selection, app routes or Advanced routing. Bandwidth limits can be changed now.") }

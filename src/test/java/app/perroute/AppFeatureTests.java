@@ -43,9 +43,12 @@ final class AppFeatureTests {
         run("Quick Route: the Explorer menu entry", AppFeatureTests::testExplorerMenu);
         run("Adaptive resources: metered networks are recognised", AppFeatureTests::testMeteredParsing);
         run("LAN Bridge: the core config", AppFeatureTests::testBridgeConfig);
-        withFixture("Quick Route: which programs can be routed", AppFeatureTests::testQuickRouteTarget);
-        withFixture("Quick Route: saving a route", AppFeatureTests::testQuickRoute);
-        withFixture("Quick Route: while connected", AppFeatureTests::testQuickRouteConnected);
+        // Quick Route is a Windows Explorer feature and uses Windows identity normalization.
+        if (RegressionFixtures.windows()) {
+            withFixture("Quick Route: which programs can be routed", AppFeatureTests::testQuickRouteTarget);
+            withFixture("Quick Route: saving a route", AppFeatureTests::testQuickRoute);
+            withFixture("Quick Route: while connected", AppFeatureTests::testQuickRouteConnected);
+        } else System.out.println("[skip] Windows-only Quick Route controller scenarios; covered by Windows CI");
         withFixture("Adaptive resources: battery and metered networks", AppFeatureTests::testAdaptiveResources);
         withFixture("LAN Bridge: devices, sharing and removal", AppFeatureTests::testBridge);
     }

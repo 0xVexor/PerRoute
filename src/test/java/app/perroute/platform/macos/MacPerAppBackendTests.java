@@ -122,7 +122,7 @@ public final class MacPerAppBackendTests {
             String first = executable(root,"SelectedOne"), second = executable(root,"SelectedTwo");
             Path marker = root.resolve("routing.pending");
             var peer = new Peer(); var proxy = new ProxyLifecycle();
-            var backend = new MacConnectionBackend(runtime,root.resolve("core"),true,proxy,new MacTunSessionClient(peer,marker));
+            var backend = new MacConnectionBackend(runtime,root.resolve("core"),true,proxy,new MacTunSessionClient(peer,marker),isolatedCatalog());
             check(backend.perAppReady() && backend.requiresPerAppGateway() && !backend.supportsPerAppKillSwitch(),"Mac routing capabilities are explicit");
             int one=port(), two=port(), upOne=port(), upTwo=port();
             var routes = List.of(new AppGateway.Route(first,0,one,upOne),new AppGateway.Route(second,1,two,upTwo));
@@ -197,7 +197,7 @@ public final class MacPerAppBackendTests {
             Files.createDirectories(path.getParent()); Files.writeString(path,"fixture; never executed");
             check(path.toFile().setExecutable(true,true),"Family fixture executable permission");
             rows.add(Map.of("name",path.getFileName().toString(),"bundlePath",path.getParent().getParent().getParent().toString(),
-                    "executablePath",path.toString(),"bundleIdentifier","fixture.browser","signingIdentifier","","teamIdentifier","","signatureValid",false));
+                    "executablePath",path.toString(),"bundleIdentifier","fixture.browser","signingIdentifier","fixture.signed","teamIdentifier","FIXTURE","signatureValid",true,"backgroundHelper",true));
         }
         var unavailable=new boolean[1];
         var catalog=new MacApplicationCatalog(op -> {
@@ -256,7 +256,7 @@ public final class MacPerAppBackendTests {
             var peer=new Peer(); var proxy=new ProxyLifecycle();
             Path directory=storage.directory().toRealPath();
             Path marker=directory.resolve("routing.pending");
-            var backend=new MacConnectionBackend(runtime,directory,true,proxy,new MacTunSessionClient(peer,marker));
+            var backend=new MacConnectionBackend(runtime,directory,true,proxy,new MacTunSessionClient(peer,marker),isolatedCatalog());
             var callback=new java.util.concurrent.atomic.AtomicReference<java.util.function.Consumer<Boolean>>();
             var isolated=(app.perroute.backend.api.ConnectionBackend)java.lang.reflect.Proxy.newProxyInstance(
                     app.perroute.backend.api.ConnectionBackend.class.getClassLoader(),
@@ -406,6 +406,11 @@ public final class MacPerAppBackendTests {
         check(peer.calls.contains("prepare-existing") && !peer.calls.contains("prepare"),"Unavailable helper is refused without approval");
         check(controller.disconnect().getOk(),"Stop waiting for unavailable helper");
         peer.existingUnavailable = false; controller.setAutoReconnect(false);
+    }
+    private static MacApplicationCatalog isolatedCatalog() {
+        // Standalone fixture executables need no installed apps. Keep these gateway tests
+        // independent of the host's native discovery library and installed inventory.
+        return new MacApplicationCatalog(operation -> Json.stringify(Map.of("version",1,"applications",List.of(),"warnings",List.of())));
     }
     private static void exactGatewayKeys() throws Exception {
         String upper=ApplicationIdentity.macExecutable("/Applications/A.app/Contents/MacOS/A");

@@ -1,0 +1,66 @@
+name: Portable regression suites
+
+on:
+  pull_request:
+  push:
+    branches: [test/portable-regression-fixtures, feature/macos-advanced-routing-lifecycle]
+  workflow_dispatch:
+
+concurrency:
+  group: portable-regressions-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    name: Regressions (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch pinned Windows Xray for real loopback integration
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $lock = Get-Content browser/helper/xray/xray.lock.json -Raw | ConvertFrom-Json
+          $asset = $lock.assets.'windows-x64'
+          Invoke-WebRequest "$($lock.source)/$($lock.version)/$($asset.file)" -OutFile "$env:RUNNER_TEMP/xray.zip"
+          if ((Get-FileHash "$env:RUNNER_TEMP/xray.zip" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $asset.sha256) { throw 'Xray archive checksum mismatch' }
+          Expand-Archive "$env:RUNNER_TEMP/xray.zip" tools/xray -Force
+          if ((Get-FileHash tools/xray/xray.exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $asset.binarySha256) { throw 'Xray binary checksum mismatch' }
+      - name: Full Windows suite including real Xray loopback
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./gradlew.bat --no-daemon -PofficialRepositories=true runAllTests runPlatformBoundaryTests 2>&1 | Tee-Object regression.log
+          exit $LASTEXITCODE
+      - name: Portable macOS suites and exact identity contracts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          sh gradlew --no-daemon -PofficialRepositories=true runAllTests runPlatformBoundaryTests runApplicationIdentityTests 2>&1 | tee regression.log
+      - name: macOS real-core lifecycle with simulated capture helper
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/fetch_macos_xray.py --with-geodata
+          sh gradlew --no-daemon -PofficialRepositories=true runMacosAdvancedRoutingTests runMacosPerAppBackendTests 2>&1 | tee -a regression.log
+      - name: Retain assertion counts and explicit skip reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-log-${{ matrix.os }}
+          path: regression.log
+          if-no-files-found: warn

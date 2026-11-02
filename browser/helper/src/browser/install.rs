@@ -221,7 +221,7 @@ mod platform {
         let host = o.target_dir.join(host_exe_name());
         let _ = u.set_value("DisplayName", &"PerRoute Browser");
         let _ = u.set_value("DisplayVersion", &crate::NATIVE_VERSION);
-        let _ = u.set_value("Publisher", &"Ali Mirzad");
+        let _ = u.set_value("Publisher", &"PerRoute");
         let _ = u.set_value("InstallLocation", &o.target_dir.display().to_string());
         let _ = u.set_value("UninstallString", &format!("\"{}\" uninstall --interactive", host.display()));
         let _ = u.set_value("NoModify", &1u32);

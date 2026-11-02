@@ -86,9 +86,11 @@ def verify_signature(app):
         if not certificate.is_file():
             raise ValueError('A certificate-signed app is required; ad-hoc signing breaks helper authentication')
         pin = hashlib.sha1(certificate.read_bytes()).hexdigest()
+    provenance = json.loads((Path(app) / 'Contents/Library/Engines/sing-box.provenance.json').read_text())
+    engine_identity = 'app.perroute.tun-engine.safari-v1' if provenance.get('safariProtocol') == 1 else 'app.perroute.tun-engine'
     for name, identity in [('', 'app.perroute.spike'), ('Contents/MacOS/PerRouteHelperInstaller', 'app.perroute.proxy-installer'),
                            ('Contents/Library/HelperTools/PerRouteProxyHelper', 'app.perroute.proxy-helper'),
-                           ('Contents/Library/Engines/sing-box', 'app.perroute.tun-engine'),
+                           ('Contents/Library/Engines/sing-box', engine_identity),
                            (f'Contents/app/resources/xray/{ENGINES[platform.machine()]}/xray', 'app.perroute.xray')]:
         requirement = f'=identifier "{identity}" and certificate leaf = H"{pin}"'
         run('/usr/bin/codesign', '--verify', '--strict', '-R', requirement, Path(app) / name)
@@ -153,7 +155,7 @@ registered=false. Do not use this removal command while another PerRoute instanc
 TEST THIS PREVIEW
 After removing the previous app/helper, copy from this DMG, launch from Applications and import
 or select a working configuration. Check first-time approval, System proxy Connect/Disconnect,
-then Chrome including helpers in Smart per-app. Keep other VPN/proxy tools disconnected for a
+then select Chrome once in Smart per-app; its verified helpers follow its route. Keep other VPN/proxy tools disconnected for a
 clear comparison. Test website content, not just an IP check. Check normal internet after Disconnect.
 
 LIMITS

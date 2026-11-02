@@ -17,6 +17,7 @@ import app.perroute.backend.api.RouteObservation
 import app.perroute.backend.api.UpdateDescriptor
 
 import app.perroute.model.ApplicationIdentity
+import app.perroute.model.ApplicationSetupMigration
 import app.perroute.model.AppRoutes
 import app.perroute.model.AppState
 import app.perroute.model.ConnectionMode
@@ -415,8 +416,9 @@ class PerRouteController @JvmOverloads constructor(
     fun connectionPhase(): ConnectionPhase = phase
     fun trafficSnapshot(): TrafficSnapshot = traffic
     fun trafficPoints(): List<TrafficPoint> = trafficPoints.toList()
-    fun trafficHistory(): TrafficHistoryStore.Snapshot = history.snapshot()
-    fun trafficReport(applicationPath: String = ""): TrafficHistoryStore.Report = history.report(applicationPath)
+    private fun historyAliases(): Map<String, String> = synchronized(state) { LinkedHashMap(state.applicationHistoryAliases()) }
+    fun trafficHistory(): TrafficHistoryStore.Snapshot = history.snapshot(historyAliases())
+    fun trafficReport(applicationPath: String = ""): TrafficHistoryStore.Report = history.report(applicationPath, historyAliases())
     fun clearTrafficHistory() { history.clear(); trafficPoints.clear() }
     fun autoFailover(): Boolean = preferences.getBoolean("autoFailover", true)
     fun setAutoFailover(value: Boolean) = preferences.putBoolean("autoFailover", value)
@@ -2367,6 +2369,7 @@ class PerRouteController @JvmOverloads constructor(
             state.autoPools().clear()
             state.autoSelections().clear()
             state.bandwidthPolicies().clear()
+            state.applicationHistoryAliases().clear()
             state.setActiveProfileId("")
             state.setSelectedNodeKey("")
             state.setAdvancedRouting(false)
@@ -2499,10 +2502,56 @@ class PerRouteController @JvmOverloads constructor(
     /** Resolve a new explicit Browse selection before adding it to an unsaved draft. */
     fun selectedApplicationIdentity(path: String): String = backend.selectApplication(path)
 
+    fun applicationGroupingSupported(): Boolean = backend.supportsApplicationGrouping()
+    fun applicationGroups(): List<app.perroute.backend.api.ApplicationGroup> = backend.applicationGroups()
+    data class ApplicationMigrationPreview(val plan: ApplicationSetupMigration.Plan, val settings: Map<String, String>)
+
+    private fun migrationSettings(): Map<String, String> {
+        // Properties.store adds a timestamp comment. Compare parsed fields, not serialized bytes.
+        val fields = java.util.Properties()
+        fields.load(java.io.ByteArrayInputStream(store.serialize(state)))
+        return java.util.Collections.unmodifiableMap(fields.stringPropertyNames().associateWith { fields.getProperty(it) })
+    }
+
+    fun previewApplicationMigration(): ApplicationMigrationPreview {
+        check(applicationGroupingSupported()) { "Application grouping is unavailable on this platform." }
+        val groups = backend.applicationGroups()
+        return synchronized(state) { ApplicationMigrationPreview(ApplicationSetupMigration.preview(state, groups), migrationSettings()) }
+    }
+
+    @Synchronized
+    fun applyApplicationMigration(preview: ApplicationMigrationPreview, choices: Map<ApplicationSetupMigration.Key, String>): ActionResult {
+        editLock("application grouping")?.let { return it }
+        if (!applicationGroupingSupported()) return ActionResult(false, "Application grouping is unavailable on this platform.")
+        return try {
+            val changedIdentities = preview.plan.entries().filter { it.key().scope() == "current" &&
+                choices[it.key()] != ApplicationSetupMigration.KEEP_EXACT
+            }.flatMap { entry -> entry.variants().map { it.identity() }.filter { it != entry.key().target() } }.toSet()
+            if (temporaryRoutes().any { it.application in changedIdentities })
+                return ActionResult(false, "Cancel temporary server overrides for these executable selections, wait for them to expire, or keep their exact selections before combining apps.")
+            val groups = backend.applicationGroups()
+            if (groups != preview.plan.groups()) return ActionResult(false, "Application discovery changed. Review a fresh grouping preview.")
+            synchronized(state) {
+                if (migrationSettings() != preview.settings) return ActionResult(false, "Settings changed. Review a fresh grouping preview.")
+                val next = ApplicationSetupMigration.apply(state, preview.plan, choices)
+                preview.plan.entries().filter { choices[it.key()] != ApplicationSetupMigration.KEEP_EXACT }
+                    .map { it.key().target() }.distinct().forEach { backend.restoreApplication(it) }
+                // Save under the state lock before publishing the new in-memory setup.
+                // A failed encrypted write leaves the old settings and history view intact.
+                store.write(store.serialize(next))
+                state.replaceWith(next)
+            }
+            autoRouting.migrate(historyAliases())
+            installedAppCacheAt = 0L; runningAppCacheAt = 0L
+            ActionResult(true, "Application grouping saved. Profiles, routes, limits and traffic history were preserved.")
+        } catch (error: Exception) { ActionResult(false, message(error)) }
+    }
+
     private fun validatedApplications(paths: Collection<String>): List<String> =
         paths.map { backend.restoreApplication(it) }
             .distinctBy { ApplicationIdentity.comparisonKey(it) }
             .filter(::keepApplication)
+            .also { backend.validateApplicationSelection(it) }
 
     private fun storeApplications(paths: Collection<String>) {
         val validated = validatedApplications(paths)
@@ -3774,7 +3823,7 @@ class PerRouteController @JvmOverloads constructor(
     }
 
     private fun saveNow() {
-        runCatching { store.write(synchronized(state) { store.serialize(state) }) }
+        runCatching { synchronized(state) { store.write(store.serialize(state)) } }
             .onFailure { log("Could not save settings: ${message(it)}") }
     }
 
@@ -3930,7 +3979,6 @@ class PerRouteController @JvmOverloads constructor(
         fun displayName(applicationPath: String): String =
             runCatching { Path.of(ApplicationIdentity.path(applicationPath)).fileName.toString() }.getOrDefault(applicationPath)
                 .let { if (it.endsWith(".exe", ignoreCase = true)) it.dropLast(4) else it }
-                .let { if (ApplicationIdentity.isMacFamily(applicationPath)) "$it (including helpers)" else it }
 
         private fun isUserFacingApplication(app: ApplicationDescriptor): Boolean {
             return isUserFacingApplication(app.name(), app.path())

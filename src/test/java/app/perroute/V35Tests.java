@@ -84,12 +84,14 @@ final class V35Tests {
         run("3.5: rule analysis and core log hints", V35Tests::testAnalysis);
         withFixture("3.5 controller: temporary servers", V35Tests::testTemporaryRoutes);
         withFixture("3.5 controller: network restore", V35Tests::testNetworkRestore);
-        withFixture("3.5 controller: recipes apply and undo", V35Tests::testRecipesController);
+        if (RegressionFixtures.windows()) withFixture("3.5 controller: recipes apply and undo", V35Tests::testRecipesController);
+        else System.out.println("[skip] Windows-only recipes apply and undo controller workflow; platform mapping is not implemented on macOS");
         withFixture("3.5 controller: doctor and safety center", V35Tests::testHealth);
         withFixture("3.5 controller: subscription intelligence", V35Tests::testSubscriptionController);
         withFixture("3.5 controller: local network trust", V35Tests::testLocalNetworkController);
         withFixture("3.5 controller: QUIC is blocked for routed apps unless turned off", V35Tests::testQuicBlocked);
-        withFixture("3.5 controller: workspaces", V35Tests::testWorkspaceController);
+        if (RegressionFixtures.windows()) withFixture("3.5 controller: workspaces", V35Tests::testWorkspaceController);
+        else System.out.println("[skip] Windows-only workspaces controller workflow; platform mapping is not implemented on macOS");
     }
 
     private static void testSnapshotDiff() {
@@ -353,7 +355,7 @@ final class V35Tests {
         List<RouteRule> rules = List.of(
                 new RouteRule("1", "Mine GitHub", "", RouteRule.MatchType.DOMAIN, "www.github.com, github.com", RouteRule.Action.PROXY, true),
                 new RouteRule("2", "Allow ads", "", RouteRule.MatchType.DOMAIN, "ads.example", RouteRule.Action.DIRECT, true));
-        String code = "C:\\Tools\\Code.exe";
+        String code = Path.of("C:/Tools/Code.exe").toString();
         var plan = RecipePlanner.plan(recipe, rules, List.of(code), List.of("D:\\Other\\Thing.exe"), Map.of(AppRoutes.normalize(code), "Main"),
                 Map.of("autoReconnect", true));
         equal(RecipePlanner.RuleStatus.DUPLICATE, plan.rules().get(0).status());
@@ -369,7 +371,7 @@ final class V35Tests {
         equal(1, plan.settings().size());
         check(plan.settings().get(0).from() && !plan.settings().get(0).to(), "Settings show before and after");
         Recipe exported = RecipePlanner.export("Out", "", "", "", List.of(), List.of(),
-                List.of(new RouteRule("x", "Scenario · Work · Work tools", "C:\\Users\\name\\app.exe", RouteRule.MatchType.DOMAIN, "slack.com", RouteRule.Action.PROXY, true),
+                List.of(new RouteRule("x", "Scenario · Work · Work tools", Path.of("C:/Users/name/app.exe").toString(), RouteRule.MatchType.DOMAIN, "slack.com", RouteRule.Action.PROXY, true),
                         new RouteRule("y", "Skip me", "", RouteRule.MatchType.DOMAIN, "skip.example", RouteRule.Action.PROXY, true)), Map.of(), Set.of("y"));
         equal(1, exported.rules().size());
         equal("Work tools", exported.rules().get(0).name());
@@ -391,7 +393,7 @@ final class V35Tests {
             WorkspaceStore reloaded = new WorkspaceStore(directory.resolve("workspaces.json"));
             equal(2, reloaded.all().size());
             equal("Personal", reloaded.find(personal.id()).name());
-            check(WorkspaceBrowsers.supported("C:\\x\\brave.exe") && !WorkspaceBrowsers.supported("C:\\x\\firefox.exe"), "Only Chromium browsers are offered");
+            check(WorkspaceBrowsers.supported(Path.of("C:/x/brave.exe").toString()) && !WorkspaceBrowsers.supported(Path.of("C:/x/firefox.exe").toString()), "Only Chromium browsers are offered");
             List<String> command = WorkspaceBrowsers.command("C:\\Chrome\\chrome.exe", directory.resolve("profile"), 19_700);
             check(command.contains("--proxy-server=socks5://127.0.0.1:19700"), "The workspace uses its own SOCKS port");
             check(command.stream().anyMatch(part -> part.startsWith("--user-data-dir=")), "A profile folder of its own");
@@ -452,7 +454,7 @@ final class V35Tests {
 
     private static void testTemporaryPlanner() {
         ProxyNode main = node("main"), second = node("second"), third = node("third");
-        String a = "C:\\A.exe", b = "C:\\B.exe";
+        String a = RegressionFixtures.application("C:\\A.exe"), b = RegressionFixtures.application("C:\\B.exe");
         var plan = RoutePlanner.plan(List.of(main, second, third), "main", List.of(a, b), false, Map.of(), Map.of(), ConnectionMode.NATIVE_PER_APP,
                 Map.of(), Map.of(AppRoutes.normalize(b), "third"));
         equal(2, plan.routes().size());
@@ -553,7 +555,7 @@ final class V35Tests {
         String executable(String name) throws IOException {
             Path file = directory.resolve(name);
             Files.writeString(file, "test");
-            return file.toAbsolutePath().normalize().toString();
+            return RegressionFixtures.identity(file);
         }
 
         @Override public void close() throws IOException {

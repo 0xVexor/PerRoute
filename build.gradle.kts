@@ -10,7 +10,25 @@ plugins {
 }
 
 group = "app.perroute"
-version = "3.6.0"
+version = providers.gradleProperty("appVersion").get()
+
+val sourceRevision = providers.exec { commandLine("git", "rev-parse", "HEAD") }.standardOutput.asText.map { it.trim() }
+val sourceBuildNumber = providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.map { it.trim() }
+val generatedBuildInfo = layout.buildDirectory.dir("generated/build-info")
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    inputs.property("revision", sourceRevision)
+    inputs.file(layout.projectDirectory.file("gradle.properties"))
+    inputs.property("number", sourceBuildNumber)
+    inputs.property("version", project.version.toString())
+    outputs.dir(generatedBuildInfo)
+    doLast {
+        val directory = generatedBuildInfo.get().asFile.apply { mkdirs() }
+        directory.resolve("perroute-build.properties").writeText(
+            "version=${project.version}\nnumber=${sourceBuildNumber.get()}\nrevision=${sourceRevision.get()}\n")
+    }
+}
+sourceSets.main { resources.srcDir(generatedBuildInfo) }
+tasks.named("processResources") { dependsOn(generateBuildInfo) }
 
 val stageNativeResources = tasks.register<Sync>("stageNativeResources") {
     into(layout.buildDirectory.dir("native-resources"))
@@ -57,7 +75,7 @@ compose.desktop {
             appResourcesRootDir.set(layout.buildDirectory.dir("native-resources"))
             targetFormats(TargetFormat.Exe)
             packageName = "PerRoute"
-            packageVersion = "3.6.0"
+            packageVersion = project.version.toString()
             description = "Modern per-application proxy client"
             vendor = "PerRoute"
             macOS {
@@ -140,7 +158,7 @@ tasks.register<JavaExec>("runPlatformBoundaryTests") {
     systemProperty("perroute.portOffset", "20000")
 }
 
-// Keep the v3 suites reachable even when a legacy Windows-path test stops runAllTests on another host.
+// Independent main-based suite entry points retain assertion counts and localize regression failures.
 listOf("Domain" to "domain", "Controller" to "controller", "5" to "v35", "Features" to "features").forEach { (name, suite) ->
     tasks.register<JavaExec>("runV3${name}Tests") {
         dependsOn(tasks.named("testClasses"))
@@ -651,6 +669,32 @@ fun tunFixtureSignature(taskName: String, binary: String, identity: String, depe
     commandLine("/usr/bin/codesign", "--force", "--sign", "-", "--identifier", identity,
         layout.buildDirectory.file("macos-tun/$binary").get().asFile.absolutePath)
 }
+val responsibleApplicationTests = tunTestBinary("compileMacosResponsibleApplicationTests", "responsible-application-tests",
+    listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationTests.c"), false)
+val responsibleApplicationProbe = tunTestBinary("compileMacosResponsibleApplicationProbe", "responsible-application-probe",
+    listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationDarwin.c",
+        "native/macos-tun/ResponsibleApplicationProbe.c"), false)
+val responsibleConnectionDarwinTests = tunTestBinary("compileMacosResponsibleConnectionDarwinTests", "responsible-connection-darwin-tests",
+    listOf("native/macos-tun/ResponsibleApplication.c", "native/macos-tun/ResponsibleApplicationDarwin.c",
+        "native/macos-tun/ResponsibleConnectionDarwinTests.c"), false)
+listOf(responsibleApplicationProbe, responsibleConnectionDarwinTests).forEach { task ->
+    task.configure { args("-framework", "Security", "-framework", "CoreFoundation") }
+}
+listOf(responsibleApplicationTests, responsibleApplicationProbe, responsibleConnectionDarwinTests).forEach { task ->
+    task.configure {
+        inputs.files("native/macos-tun/ResponsibleApplication.h", "native/macos-tun/ResponsibleApplicationInternal.h")
+    }
+}
+tasks.register<Exec>("runMacosResponsibleApplicationTests") {
+    dependsOn(responsibleApplicationTests)
+    onlyIf { System.getProperty("os.name") == "Mac OS X" }
+    commandLine(layout.buildDirectory.file("macos-tun/responsible-application-tests").get().asFile.absolutePath)
+}
+tasks.register<Exec>("runMacosResponsibleConnectionDarwinTests") {
+    dependsOn(responsibleConnectionDarwinTests)
+    onlyIf { System.getProperty("os.name") == "Mac OS X" }
+    commandLine(layout.buildDirectory.file("macos-tun/responsible-connection-darwin-tests").get().asFile.absolutePath)
+}
 val tunSessionSources = listOf("native/macos-tun/TunStore.m", "native/macos-tun/TunSession.m", "native/macos-tun/EngineWorker.c")
 val storeFixture = tunTestBinary("compileMacosTunStoreFixture", "store-fixture", listOf("native/macos-tun/StoreFixture.c"), false)
 val signStoreFixture = tunFixtureSignature("signMacosTunStoreFixture", "store-fixture", "app.perroute.store-fixture", storeFixture)
@@ -759,11 +803,25 @@ tasks.register<JavaExec>("runApplicationIdentityTests") {
 }
 
 // Actual loopback Xray/gateway exercise; the privileged helper is simulated and never activates capture.
+val macosFixtureWorkingDirectory = layout.buildDirectory.dir("macos-fixture-runtime")
+tasks.register<JavaExec>("runMacosAdvancedRoutingTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.MacAdvancedRoutingTests")
+    systemProperty("perroute.portOffset", "15000")
+    workingDir(macosFixtureWorkingDirectory)
+    doFirst { macosFixtureWorkingDirectory.get().asFile.mkdirs() }
+    args(layout.projectDirectory.dir("tools/xray").asFile.absolutePath)
+    enableAssertions = true
+}
+
 tasks.register<JavaExec>("runMacosPerAppBackendTests") {
     dependsOn(tasks.named("testClasses"))
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("app.perroute.platform.macos.MacPerAppBackendTests")
     systemProperty("perroute.portOffset", "15000")
+    workingDir(macosFixtureWorkingDirectory)
+    doFirst { macosFixtureWorkingDirectory.get().asFile.mkdirs() }
     args(layout.projectDirectory.dir("tools/xray").asFile.absolutePath)
     enableAssertions = true
 }
@@ -809,6 +867,13 @@ tasks.register<JavaExec>("runMacosApplicationFamilyRoutingTests") {
     enableAssertions = true
 }
 
+tasks.register<JavaExec>("runMacosApplicationGroupTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.platform.macos.MacApplicationGroupTests")
+    enableAssertions = true
+}
+
 tasks.register<JavaExec>("runMacosApplicationIconTests") {
     dependsOn(tasks.named("testClasses"), buildMacosDesktopBridge)
     classpath = sourceSets["test"].runtimeClasspath
@@ -851,6 +916,19 @@ tasks.register<Exec>("packageMacosPkg") {
     }
 }
 
+tasks.register<Exec>("packageMacosSafariPkg") {
+    group = "distribution"
+    description = "Build the source-identified Safari preview PKG without tests or installation"
+    dependsOn(tasks.named("createDistributable"))
+    onlyIf { System.getProperty("os.name") == "Mac OS X" }
+    commandLine(providers.gradleProperty("pythonExecutable").getOrElse("python3"),
+        "scripts/build_macos_safari_pkg.py", "--app",
+        layout.buildDirectory.dir("compose/binaries/main/app/PerRoute.app").get().asFile.absolutePath)
+    providers.gradleProperty("previousMacosHelperRecovery").orNull?.let {
+        args("--previous-helper-recovery", it)
+    }
+}
+
 val fetchMacosXray = tasks.register<Exec>("fetchMacosXray") {
     group = "distribution"
     description = "Download or verify the SHA-256-pinned host Xray for desktop packaging"
@@ -859,4 +937,20 @@ val fetchMacosXray = tasks.register<Exec>("fetchMacosXray") {
 }
 stageNativeResources.configure {
     if (System.getProperty("os.name") == "Mac OS X") dependsOn(fetchMacosXray)
+}
+
+
+tasks.register<JavaExec>("runApplicationSetupMigrationTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.ApplicationSetupMigrationTests")
+    enableAssertions = true
+}
+
+
+tasks.register<JavaExec>("runApplicationMigrationControllerTests") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.ApplicationMigrationControllerTests")
+    enableAssertions = true
 }

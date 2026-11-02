@@ -84,6 +84,9 @@ public interface ConnectionBackend {
     default String restoreApplication(String identity) throws java.io.IOException { return selectApplication(identity); }
     List<ApplicationDescriptor> installedApplications();
     List<ApplicationDescriptor> runningApplications();
+    default boolean supportsApplicationGrouping() { return false; }
+    default List<ApplicationGroup> applicationGroups() throws java.io.IOException { return List.of(); }
+    default void validateApplicationSelection(List<String> identities) throws java.io.IOException { }
 
     /** Replace one live route; unsupported implementations must throw so the controller can restart safely. */
     void applyRuntimeChange(XrayConfigGenerator.RuntimeChange change, String newTag, String oldTag, String config) throws Exception;

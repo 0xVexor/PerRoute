@@ -46,6 +46,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 final class V3DomainTests {
@@ -713,9 +714,22 @@ final class V3DomainTests {
                 try { read = held.getInputStream().read(); } catch (IOException closed) { read = -1; }
                 equal(-1, read);
                 held.close();
-                try (ServerSocket reuse = new ServerSocket()) {
-                    reuse.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
-                }
+                // Darwin can briefly complete a queued TCP handshake while close wakes
+                // the acceptor. Require refusal within a bounded cleanup window.
+                long cleanupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+                boolean refused = false;
+                do {
+                    try (Socket afterStop = new Socket()) {
+                        try {
+                            afterStop.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), 1_000);
+                        } catch (java.net.ConnectException expected) {
+                            refused = true;
+                            break;
+                        }
+                    }
+                    Thread.sleep(10);
+                } while (System.nanoTime() < cleanupDeadline);
+                check(refused, "A stopped gateway must release its listener within two seconds");
             } finally {
                 gateway.stop();
             }
@@ -850,9 +864,9 @@ final class V3DomainTests {
     private static void testBackupRestorePlan() throws Exception {
         Path directory = Files.createTempDirectory("perroute-backup-");
         try {
-            String chrome = Files.writeString(directory.resolve("chrome.exe"), "x").toString();
-            String telegram = Files.writeString(directory.resolve("Telegram.exe"), "x").toString();
-            String elsewhereTelegram = Files.writeString(Files.createDirectories(directory.resolve("other")).resolve("Telegram.exe"), "x").toString();
+            String chrome = RegressionFixtures.identity(Files.writeString(directory.resolve("chrome.exe"), "x"));
+            String telegram = RegressionFixtures.identity(Files.writeString(directory.resolve("Telegram.exe"), "x"));
+            String elsewhereTelegram = RegressionFixtures.identity(Files.writeString(Files.createDirectories(directory.resolve("other")).resolve("Telegram.exe"), "x"));
             String sub = "https://sub.example/list";
 
             AppState source = new AppState();
@@ -943,36 +957,38 @@ final class V3DomainTests {
         Path directory = Files.createTempDirectory("perroute-state3-");
         try {
             AppStateStore store = new AppStateStore(directory.resolve("state.bin"));
+            String application = RegressionFixtures.windows() ? "C:\\Apps\\A.exe"
+                    : RegressionFixtures.identity(Files.writeString(directory.resolve("A"), "fixture"));
             Properties v2 = new Properties();
             v2.setProperty("node.count", "0");
             v2.setProperty("app.count", "1");
-            v2.setProperty("app.0.path", "C:\\Apps\\A.exe");
+            v2.setProperty("app.0.path", application);
             v2.setProperty("advanced.enabled", "true");
             v2.setProperty("route.count", "1");
-            v2.setProperty("route.0.app", "C:\\Apps\\A.exe");
+            v2.setProperty("route.0.app", application);
             v2.setProperty("route.0.node", "n1");
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             v2.store(bytes, "v2");
             AppState migrated = store.parse(bytes.toByteArray());
             check(migrated.migratedFromV2(), "A state without a version comes from version 2");
             check(migrated.autoApps().isEmpty() && migrated.bandwidthPolicies().isEmpty(), "Nothing is automatic after migration");
-            equal("n1", migrated.appRoutes().get(AppRoutes.normalize("C:\\Apps\\A.exe")));
+            equal("n1", migrated.appRoutes().get(AppRoutes.normalize(application)));
             check(!new AppState().migratedFromV2(), "A fresh installation is not a migration");
 
-            migrated.autoApps().add(AppRoutes.normalize("C:\\Apps\\A.exe"));
-            migrated.autoPools().put(AppRoutes.normalize("C:\\Apps\\A.exe"), "tag:Work");
-            migrated.autoSelections().put(AppRoutes.normalize("C:\\Apps\\A.exe"), new AutoSelection("n2", NOW));
-            migrated.bandwidthPolicies().put(AppRoutes.normalize("C:\\Apps\\A.exe"), new BandwidthPolicy(8_000_000, 0));
-            migrated.profiles().add(new ConnectionProfile("p", "P", List.of("C:\\Apps\\A.exe"), "n1", ConnectionMode.NATIVE_PER_APP,
-                    List.of(), true, Map.of(), Set.of("C:\\Apps\\A.exe")));
+            migrated.autoApps().add(AppRoutes.normalize(application));
+            migrated.autoPools().put(AppRoutes.normalize(application), "tag:Work");
+            migrated.autoSelections().put(AppRoutes.normalize(application), new AutoSelection("n2", NOW));
+            migrated.bandwidthPolicies().put(AppRoutes.normalize(application), new BandwidthPolicy(8_000_000, 0));
+            migrated.profiles().add(new ConnectionProfile("p", "P", List.of(application), "n1", ConnectionMode.NATIVE_PER_APP,
+                    List.of(), true, Map.of(), Set.of(application)));
             store.save(migrated);
             AppState reloaded = store.load();
             check(reloaded.migratedFromV2(), "The migration flag survives saving");
-            equal(Set.of(AppRoutes.normalize("C:\\Apps\\A.exe")), reloaded.autoApps());
-            equal("tag:Work", reloaded.autoPools().get(AppRoutes.normalize("C:\\Apps\\A.exe")));
-            equal(new AutoSelection("n2", NOW), reloaded.autoSelections().get(AppRoutes.normalize("C:\\Apps\\A.exe")));
-            equal(new BandwidthPolicy(8_000_000, 0), reloaded.bandwidthPolicies().get(AppRoutes.normalize("C:\\Apps\\A.exe")));
-            equal(Set.of(AppRoutes.normalize("C:\\Apps\\A.exe")), reloaded.profiles().get(0).autoApps());
+            equal(Set.of(AppRoutes.normalize(application)), reloaded.autoApps());
+            equal("tag:Work", reloaded.autoPools().get(AppRoutes.normalize(application)));
+            equal(new AutoSelection("n2", NOW), reloaded.autoSelections().get(AppRoutes.normalize(application)));
+            equal(new BandwidthPolicy(8_000_000, 0), reloaded.bandwidthPolicies().get(AppRoutes.normalize(application)));
+            equal(Set.of(AppRoutes.normalize(application)), reloaded.profiles().get(0).autoApps());
             equal(String.valueOf(AppStateStore.STATE_VERSION), store.loadProperties().getProperty("state.version"));
 
             equal(BandwidthPolicy.MIN_BITS_PER_SECOND, new BandwidthPolicy(10, 0).downloadBitsPerSecond());

@@ -190,7 +190,7 @@ private fun NewQuickAccess(state: QuickAccessState, temporary: Boolean, closeTem
                     Spacer(Modifier.width(10.dp))
                     Text("PerRoute", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(10.dp))
-                    Text(app.perroute.service.SecureUpdateService.CURRENT_VERSION, color = White.copy(.75f), fontSize = 12.sp)
+                    Text(app.perroute.service.BuildIdentity.displayVersion(), color = White.copy(.75f), fontSize = 12.sp)
                     Spacer(Modifier.weight(1f))
                     MenuIcon(Icons.Rounded.MoreHoriz, "More actions", state.menu(), tint = White, bordered = false)
                 }
@@ -311,7 +311,7 @@ internal fun SimpleQuickAccess(state: QuickAccessState, temporary: Boolean = fal
             Spacer(Modifier.width(10.dp))
             Text("PerRoute", color = White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(10.dp))
-            Text(app.perroute.service.SecureUpdateService.CURRENT_VERSION, color = Muted, fontSize = 12.sp)
+            Text(app.perroute.service.BuildIdentity.displayVersion(), color = Muted, fontSize = 12.sp)
             Spacer(Modifier.weight(1f))
             MenuIcon(Icons.Rounded.MoreHoriz, "More actions", state.menu(), tint = White.copy(.8f), bordered = false)
         }

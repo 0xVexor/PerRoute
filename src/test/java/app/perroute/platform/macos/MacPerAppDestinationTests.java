@@ -28,6 +28,9 @@ final class MacPerAppDestinationTests {
     }
 
     private static void exchange(XrayRuntime runtime, Path root, String identity, boolean tls, String expected, boolean perApp) throws Exception {
+        // Prepare browser bytes before connecting: first-use JSSE initialization can
+        // outlast Xray's bounded sniffing window on a cold CI runner.
+        byte[] payload = browserPayload(tls);
         var observed = new CompletableFuture<String>();
         try (var upstream = new ServerSocket(0, 4, InetAddress.getLoopbackAddress())) {
             upstream.setSoTimeout(5000);
@@ -69,15 +72,7 @@ final class MacPerAppDestinationTests {
                 try (var socket = new Socket(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("127.0.0.1", gatewayPort)))) {
                     // Public numeric destination models a browser's local DNS result. The local SOCKS fixture never dials it.
                     socket.connect(new InetSocketAddress("8.8.4.4", 443), 3000);
-                    if (tls) {
-                        var engine = SSLContext.getDefault().createSSLEngine("browser-destination.test", 443);
-                        engine.setUseClientMode(true); engine.beginHandshake();
-                        var hello = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
-                        engine.wrap(ByteBuffer.allocate(0), hello);
-                        socket.getOutputStream().write(hello.array(), 0, hello.position());
-                    } else {
-                        socket.getOutputStream().write("GET / HTTP/1.1\r\nHost: browser-destination.test\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
-                    }
+                    socket.getOutputStream().write(payload);
                     socket.getOutputStream().flush();
                     String actual = observed.get(6, TimeUnit.SECONDS);
                     if (!expected.equals(actual)) throw new AssertionError("Expected upstream destination " + expected + " but received " + actual);
@@ -87,5 +82,23 @@ final class MacPerAppDestinationTests {
                 if (peer.isAlive()) throw new AssertionError("Destination fixture did not stop");
             }
         }
+    }
+
+    private static byte[] browserPayload(boolean tls) throws Exception {
+        if (!tls) return "GET / HTTP/1.1\r\nHost: browser-destination.test\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
+        var engine = SSLContext.getDefault().createSSLEngine("browser-destination.test", 443);
+        engine.setUseClientMode(true);
+        // Peer-host hints do not guarantee SNI across JSSE/provider updates.
+        // The fixture must actually send the hostname that Xray is expected to recover.
+        var parameters = engine.getSSLParameters();
+        parameters.setServerNames(List.of(new javax.net.ssl.SNIHostName("browser-destination.test")));
+        engine.setSSLParameters(parameters);
+        engine.beginHandshake();
+        var hello = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
+        var wrapped = engine.wrap(ByteBuffer.allocate(0), hello);
+        if (wrapped.getStatus() != javax.net.ssl.SSLEngineResult.Status.OK || wrapped.bytesProduced() == 0 ||
+                !new String(hello.array(), 0, hello.position(), StandardCharsets.ISO_8859_1).contains("browser-destination.test"))
+            throw new AssertionError("TLS fixture did not produce a ClientHello with its explicit SNI hostname");
+        return Arrays.copyOf(hello.array(), hello.position());
     }
 }
