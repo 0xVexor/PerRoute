@@ -9,7 +9,7 @@
 A modern Windows client for VLESS, VMess, Trojan and Shadowsocks, built on [Xray-core](https://github.com/XTLS/Xray-core).
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078D6)
-![Version](https://img.shields.io/badge/version-3.5.0-6B57D9)
+![Version](https://img.shields.io/badge/version-3.5.1-6B57D9)
 ![Built with](https://img.shields.io/badge/built%20with-Kotlin%20%2B%20Compose%20Desktop-7F52FF)
 ![Core](https://img.shields.io/badge/core-Xray-0B9B83)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
@@ -72,15 +72,15 @@ Get the latest build from the [Releases](https://github.com/AliMirzad/PerRoute/r
 
 | Package | Use it when |
 |---|---|
-| `PerRoute-Setup-3.5.0.exe` | You want everything, including Smart per-app mode. The installer asks for Administrator approval once and installs PerRoute together with the per-app engine. |
-| `PerRoute-Portable-3.5.0.zip` | You want a no-install build. Extract the folder and run `PerRoute.exe`. System proxy and Local proxy work out of the box; Smart per-app works only if the per-app engine is already installed. |
+| `PerRoute-Setup-3.5.1.exe` | You want everything, including Smart per-app mode. The installer asks for Administrator approval once and installs PerRoute together with the per-app engine. |
+| `PerRoute-Portable-3.5.1.zip` | You want a no-install build. Extract the folder and run `PerRoute.exe`. System proxy and Local proxy work out of the box; Smart per-app works only if the per-app engine is already installed. |
 
 **Requirements:** Windows 10 or 11, 64-bit. The Java runtime and Xray core are bundled; nothing else needs to be installed.
 
 Verify a download against the SHA-256 values published with each release:
 
 ```powershell
-Get-FileHash .\PerRoute-Setup-3.5.0.exe -Algorithm SHA256
+Get-FileHash .\PerRoute-Setup-3.5.1.exe -Algorithm SHA256
 ```
 
 ## Quick start
@@ -335,9 +335,9 @@ This produces the following in `dist/`:
 
 | Output | Description |
 |---|---|
-| `PerRoute-Setup-3.5.0.exe` | Offline installer with the per-app engine |
-| `PerRoute-Portable-3.5.0.zip` | Self-contained portable build |
-| `PerRoute-3.5.0/` | Unpacked application image |
+| `PerRoute-Setup-3.5.1.exe` | Offline installer with the per-app engine |
+| `PerRoute-Portable-3.5.1.zip` | Self-contained portable build |
+| `PerRoute-3.5.1/` | Unpacked application image |
 
 The installer dependencies are downloaded on first use and verified against pinned SHA-256 digests.
 
@@ -375,7 +375,7 @@ docs/screenshots/                      Images used in this document
 Updates are distributed as a signed manifest next to the installer. Keep the private key outside the repository.
 
 ```powershell
-java tools\update\UpdateManifestTool.java sign 3.5.0 dist\PerRoute-Setup-3.5.0.exe https://github.com/AliMirzad/PerRoute/releases/download/v3.5.0/PerRoute-Setup-3.5.0.exe release-secrets\perroute-update-private.pk8 dist\update.json
+java tools\update\UpdateManifestTool.java sign 3.5.1 dist\PerRoute-Setup-3.5.1.exe https://github.com/AliMirzad/PerRoute/releases/download/v3.5.1/PerRoute-Setup-3.5.1.exe release-secrets\perroute-update-private.pk8 dist\update.json
 ```
 
 Attach `update.json` to the release. Users enable updates by entering this feed once in *Settings > Updates*:

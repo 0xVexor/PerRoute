@@ -6,7 +6,7 @@ $GradleHome = Join-Path $ProjectRoot '.gradle-home'
 $BootstrapGradle = Join-Path $BuildRoot 'gradle-bootstrap\gradle-9.7.0\bin\gradle.bat'
 $Wrapper = Join-Path $ProjectRoot 'gradlew.bat'
 $Gradle = if (Test-Path -LiteralPath $BootstrapGradle) { $BootstrapGradle } else { $Wrapper }
-$Version = '3.5.0'
+$Version = '3.5.1'
 $VendorDir = Join-Path $BuildRoot 'vendor'
 
 function Get-VerifiedAsset {

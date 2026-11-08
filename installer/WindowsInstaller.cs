@@ -15,8 +15,8 @@ using Microsoft.Win32;
 [assembly: AssemblyDescription("Complete system installer for PerRoute")]
 [assembly: AssemblyCompany("Ali Mirzad")]
 [assembly: AssemblyProduct("PerRoute")]
-[assembly: AssemblyVersion("3.5.0.0")]
-[assembly: AssemblyFileVersion("3.5.0.0")]
+[assembly: AssemblyVersion("3.5.1.0")]
+[assembly: AssemblyFileVersion("3.5.1.0")]
 
 namespace PerRouteSetup
 {
@@ -51,7 +51,7 @@ namespace PerRouteSetup
 
     internal sealed class InstallerForm : Form
     {
-        private const string Version = "3.5.0";
+        private const string Version = "3.5.1";
         private const string ResourceName = "PerRoute.Payload";
         private const string ProxiFyreResourceName = "PerRoute.ProxiFyreSetup";
         private const string VisualCppResourceName = "PerRoute.VisualCppRuntime";
@@ -312,7 +312,11 @@ namespace PerRouteSetup
                 string extracted = extractedDirectories[0];
 
                 progress.Report(new InstallProgress(79, "Installing the per-app network engine and driver."));
-                bool restartRequired = InstallPerAppEngine(dependencyStage);
+                // The runtime and the packet filter driver are installed explicitly: relying on the engine's own
+                // setup to chain them leaves a machine without them when that step is skipped or fails quietly.
+                bool restartRequired = InstallPrerequisite(Path.Combine(dependencyStage, VisualCppFileName), "/install /quiet /norestart", "The Visual C++ Runtime");
+                restartRequired |= InstallPrerequisite(Path.Combine(dependencyStage, WindowsPacketFilterFileName), null, "The Windows Packet Filter driver");
+                restartRequired |= InstallPerAppEngine(dependencyStage);
                 VerifyPerAppEngine();
                 RemoveDependencyShortcuts();
 
@@ -429,6 +433,28 @@ namespace PerRouteSetup
             }
         }
 
+        /// <summary>Runs a bundled installer silently. Returns true when Windows must restart to finish it.</summary>
+        private static bool InstallPrerequisite(string file, string arguments, string name)
+        {
+            bool msi = file.EndsWith(".msi", StringComparison.OrdinalIgnoreCase);
+            string program = msi ? Path.Combine(Environment.SystemDirectory, "msiexec.exe") : file;
+            string parameters = msi ? "/i \"" + file + "\" /qn /norestart" : arguments;
+            ProcessStartInfo start = new ProcessStartInfo(program, parameters) {
+                WorkingDirectory = Path.GetDirectoryName(file),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            };
+            using (Process process = Process.Start(start))
+            {
+                process.WaitForExit();
+                // 1638: a newer version is already installed; 3010 and 1641: installed, restart needed.
+                if (process.ExitCode == 0 || process.ExitCode == 1638) return false;
+                if (process.ExitCode == 3010 || process.ExitCode == 1641) return true;
+                throw new InvalidOperationException(name + " could not be installed (code " + process.ExitCode + ").");
+            }
+        }
+
         private static bool InstallPerAppEngine(string directory)
         {
             string setup = Path.Combine(directory, ProxiFyreFileName);
@@ -456,6 +482,9 @@ namespace PerRouteSetup
             using (RegistryKey machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
             using (RegistryKey service = machine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\ProxiFyreService"))
                 if (service == null) throw new InvalidDataException("The ProxiFyre Windows service was not registered.");
+            using (RegistryKey machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+            using (RegistryKey driver = machine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\ndisrd"))
+                if (driver == null) throw new InvalidDataException("The Windows Packet Filter driver was not registered.");
         }
 
         private static void RemoveDependencyShortcuts()

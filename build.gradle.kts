@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "app.perroute"
-version = "3.5.0"
+version = "3.5.1"
 
 val stageNativeResources = tasks.register<Sync>("stageNativeResources") {
     into(layout.buildDirectory.dir("native-resources"))
@@ -55,7 +55,7 @@ compose.desktop {
             appResourcesRootDir.set(layout.buildDirectory.dir("native-resources"))
             targetFormats(TargetFormat.Exe)
             packageName = "PerRoute"
-            packageVersion = "3.5.0"
+            packageVersion = "3.5.1"
             description = "Modern per-application proxy client"
             vendor = "PerRoute"
             windows {

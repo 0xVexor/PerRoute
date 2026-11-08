@@ -27,6 +27,11 @@ import java.util.regex.Pattern;
 
 public final class ProxiFyreManager {
     public static final String SERVICE_NAME = "ProxiFyreService";
+    /** The Windows Packet Filter kernel driver that ProxiFyre depends on. */
+    public static final String DRIVER_SERVICE = "ndisrd";
+    private static final String DRIVER_NAME = "Windows.Packet.Filter.3.6.2.1.x64.msi";
+    private static final URI DRIVER_URI = URI.create("https://github.com/wiresock/ndisapi/releases/download/v3.6.2/" + DRIVER_NAME);
+    private static final String EXPECTED_DRIVER_SHA256 = "9c388c0b7f189f7fa98720bae2caecf7d64f30910838b80b438ecf8956b8502c";
     public static final String VERSION = "2.6.2";
     private static final String SETUP_NAME = "ProxiFyre-" + VERSION + "-win-x64-setup.exe";
     private static final URI SETUP_URI = URI.create("https://github.com/wiresock/proxifyre/releases/download/v" + VERSION + "/" + SETUP_NAME);
@@ -44,7 +49,7 @@ public final class ProxiFyreManager {
 
     public Inspection inspect() {
         Path executable = executablePath();
-        return new Inspection(Files.isRegularFile(executable), serviceExists(), executable);
+        return new Inspection(Files.isRegularFile(executable), serviceExists() && serviceExists(DRIVER_SERVICE), executable);
     }
 
     public String generateConfig(List<String> applicationPaths) {
@@ -303,8 +308,26 @@ public final class ProxiFyreManager {
         if (exit != 0 && exit != 1641 && exit != 3010) {
             throw new IOException("ProxiFyre setup exited with code " + exit);
         }
+        if (!serviceExists(DRIVER_SERVICE)) installDriver(downloads, progress);
         if (!inspect().ready()) throw new IOException("Setup finished, but the ProxiFyre service was not found. Windows may need a restart.");
         progress.accept("The per-app engine is installed.");
+    }
+
+    /** Installs the packet filter driver when the engine's setup left it out; the file is checked against a pinned hash. */
+    private void installDriver(Path downloads, Consumer<String> progress) throws IOException, InterruptedException {
+        progress.accept("Downloading the Windows Packet Filter driver…");
+        byte[] payload = download(DRIVER_URI, 4 * 1024 * 1024);
+        if (!MessageDigest.isEqual(EXPECTED_DRIVER_SHA256.getBytes(StandardCharsets.US_ASCII),
+                sha256(payload).getBytes(StandardCharsets.US_ASCII))) {
+            throw new IOException("Windows Packet Filter installer checksum mismatch");
+        }
+        Path msi = downloads.resolve(DRIVER_NAME);
+        Files.write(msi, payload);
+        progress.accept("Installing the Windows Packet Filter driver…");
+        int exit = new ProcessBuilder("msiexec.exe", "/i", msi.toString(), "/qn", "/norestart").start().waitFor();
+        if (exit != 0 && exit != 1641 && exit != 3010 && exit != 1638) {
+            throw new IOException("Windows Packet Filter setup exited with code " + exit);
+        }
     }
 
     private byte[] download(URI uri, int limit) throws IOException, InterruptedException {
@@ -331,8 +354,12 @@ public final class ProxiFyreManager {
     }
 
     private boolean serviceExists() {
+        return serviceExists(SERVICE_NAME);
+    }
+
+    private boolean serviceExists(String name) {
         try {
-            Process process = new ProcessBuilder("sc.exe", "query", SERVICE_NAME).redirectErrorStream(true).start();
+            Process process = new ProcessBuilder("sc.exe", "query", name).redirectErrorStream(true).start();
             return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
         } catch (Exception ignored) {
             return false;

@@ -26,7 +26,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 public final class SecureUpdateService {
-    public static final String CURRENT_VERSION = "3.5.0";
+    public static final String CURRENT_VERSION = "3.5.1";
     private static final String UPDATE_PUBLIC_KEY =
             "MCowBQYDK2VwAyEAxO/TDTxdoBCM5F0jwU0n31a3ymgOCfDXbLXs2pyxDMY=";
     private static final int MAX_MANIFEST_BYTES = 64 * 1024;
