@@ -149,6 +149,13 @@ tasks.register<JavaExec>("runAllTests") {
     systemProperty("perroute.portOffset", "20000")
 }
 
+// Checks discovery, icons, the driver and DNS against the real machine (run on a clean Windows system).
+tasks.register<JavaExec>("runWindowsSmoke") {
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("app.perroute.WindowsSmoke")
+}
+
 // Runs platform selection, diagnostics and fake-backed maintenance/local/system regressions.
 tasks.register<JavaExec>("runPlatformBoundaryTests") {
     dependsOn(tasks.named("testClasses"))

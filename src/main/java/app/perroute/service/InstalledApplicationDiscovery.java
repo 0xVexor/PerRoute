@@ -19,6 +19,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class InstalledApplicationDiscovery {
+    /** The {@link IssueLog} source for everything this class falls back on. */
+    public static final String SOURCE = "app-discovery";
     private static final Duration QUERY_TIMEOUT = Duration.ofSeconds(12);
     private static final List<Query> QUERIES = List.of(
             new Query("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall", null),
@@ -70,10 +72,12 @@ public final class InstalledApplicationDiscovery {
             byte[] output = process.getInputStream().readAllBytes();
             if (!process.waitFor(QUERY_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
+                IssueLog.record(SOURCE, "Windows Store app list timed out after " + QUERY_TIMEOUT.toSeconds() + "s");
                 return List.of();
             }
             return parseShellOutput(decodePowerShellOutput(output));
-        } catch (IOException ignored) {
+        } catch (IOException error) {
+            IssueLog.record(SOURCE, "Could not read the Windows Store app list", error);
             return List.of();
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
@@ -136,11 +140,17 @@ public final class InstalledApplicationDiscovery {
             byte[] output = process.getInputStream().readAllBytes();
             if (!process.waitFor(QUERY_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
+                IssueLog.record(SOURCE, "Registry query timed out: " + query.key);
                 return List.of();
             }
-            if (process.exitValue() != 0) return List.of();
+            // A missing key (exit 1) is normal for the 32-bit view on some systems, so only other codes are issues.
+            if (process.exitValue() != 0) {
+                if (process.exitValue() != 1) IssueLog.record(SOURCE, "Registry query failed (" + process.exitValue() + "): " + query.key);
+                return List.of();
+            }
             return parseRegistryOutput(new String(output, Charset.defaultCharset()));
         } catch (IOException error) {
+            IssueLog.record(SOURCE, "Could not run the registry query for " + query.key, error);
             return List.of();
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();

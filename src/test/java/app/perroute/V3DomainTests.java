@@ -58,6 +58,8 @@ final class V3DomainTests {
 
     static void runAll() throws Exception {
         run("Store apps: an updated app is found at its new folder", V3DomainTests::testStoreAppPaths);
+        run("Store apps: the manifest logo is used when the shell has no icon", V3DomainTests::testStoreAppIcon);
+        run("Issue log: handled problems stay visible", V3DomainTests::testIssueLog);
         run("Quality: unknown without evidence", V3DomainTests::testQualityUnknown);
         run("Quality: excellent, explained and deterministic", V3DomainTests::testQualityExcellent);
         run("Quality: port checks alone are capped", V3DomainTests::testQualityUnverifiedCap);
@@ -126,6 +128,52 @@ final class V3DomainTests {
             samples.add(QualitySample.tunnel(at + 1_000, true, tunnelMs + (i % 3), ""));
         }
         return samples;
+    }
+
+    private static void testIssueLog() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("perroute-issues");
+        try {
+            java.nio.file.Path file = dir.resolve("sub").resolve("issues.log");
+            app.perroute.service.IssueLog.reset(file);
+            app.perroute.service.IssueLog.record("a", "first", new IllegalStateException("boom"));
+            app.perroute.service.IssueLog.record("b", "second");
+            equal(1, app.perroute.service.IssueLog.recent("a").size());
+            check(app.perroute.service.IssueLog.recent("a").get(0).message().contains("IllegalStateException - boom"), "The cause is kept with the message");
+            equal(2, app.perroute.service.IssueLog.recent().size());
+            check(java.nio.file.Files.readString(file).contains("[b] second"), "Issues are also written to the file");
+            app.perroute.service.IssueLog.reset(dir);
+            app.perroute.service.IssueLog.record("c", "an unwritable target must not throw");
+            equal(1, app.perroute.service.IssueLog.recent("c").size());
+        } finally {
+            app.perroute.service.IssueLog.reset(null);
+            try (var files = java.nio.file.Files.walk(dir)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
+    }
+
+    private static void testStoreAppIcon() throws Exception {
+        java.nio.file.Path root = java.nio.file.Files.createTempDirectory("perroute-store-icon");
+        try {
+            java.nio.file.Path assets = java.nio.file.Files.createDirectories(root.resolve("Assets"));
+            for (String name : new String[] { "App.scale-100.png", "App.scale-200.png", "App.targetsize-24.png", "App.targetsize-64.png",
+                    "App.targetsize-256.png", "App.targetsize-64_contrast-white.png", "Tile.scale-200.png" })
+                java.nio.file.Files.writeString(assets.resolve(name), "x");
+            java.nio.file.Files.writeString(root.resolve("AppxManifest.xml"), """
+                    <Package><Applications>
+                    <Application Id="Other" Executable="Other.exe"><uap:VisualElements Square150x150Logo="Assets\\Tile.png" Square44x44Logo="Assets\\Missing.png"/></Application>
+                    <Application Id="App" Executable="App.exe"><uap:VisualElements Square150x150Logo="Assets\\Tile.png" Square44x44Logo="Assets\\App.png"/></Application>
+                    </Applications></Package>""");
+            java.nio.file.Path found = app.perroute.service.StoreAppIcon.find(root.resolve("App.exe"));
+            check(found != null, "A packaged app's manifest logo is found");
+            equal("App.targetsize-64.png", found == null ? "" : found.getFileName().toString());
+            check(app.perroute.service.StoreAppIcon.find(root.resolve("Other.exe")) == null, "A missing logo gives no icon instead of a wrong one");
+            check(app.perroute.service.StoreAppIcon.find(java.nio.file.Path.of("C:\\NoPackage\\x.exe")) == null, "A non-packaged app has no manifest logo");
+        } finally {
+            try (var files = java.nio.file.Files.walk(root)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
     }
 
     private static void testStoreAppPaths() {

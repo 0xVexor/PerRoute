@@ -1731,6 +1731,10 @@ class PerRouteController @JvmOverloads constructor(
         findings += if (!environment.coreReady) HealthFinding("core", "PerRoute", CheckStatus.FAIL, "The connection core is not installed",
             "Xray is missing, so no connection can start.", Repair.OPEN_COMPONENTS)
         else HealthFinding("core", "PerRoute", CheckStatus.PASS, "The connection core is installed", "")
+        app.perroute.service.IssueLog.recent(app.perroute.service.InstalledApplicationDiscovery.SOURCE).lastOrNull()?.let { issue ->
+            findings += HealthFinding("apps", "PerRoute", CheckStatus.WARN, "The app list may be incomplete",
+                "Windows did not return every installed app (${issue.message()}). Apps missing from the list can still be added with Browse.")
+        }
         if (mode == ConnectionMode.NATIVE_PER_APP) {
             val driver = runCatching { backend.perAppDriverState() }.getOrDefault(ConnectionBackend.PerAppDriverState.UNKNOWN)
             findings += when {
