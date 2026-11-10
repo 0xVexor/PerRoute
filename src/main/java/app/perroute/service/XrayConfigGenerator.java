@@ -406,15 +406,13 @@ public final class XrayConfigGenerator {
             app.put("protocol", "socks");
             app.put("tag", perAppTag(index));
             app.put("settings", Map.of("udp", true));
-            if (ApplicationIdentity.isMac(applicationPaths.get(index))) {
-                // Transparent capture supplies a locally resolved IP. Preserve the HTTP/TLS hostname
-                // for the proxy server instead of requiring that local DNS result to be trustworthy.
-                Map<String, Object> transparentSniffing = new LinkedHashMap<>(sniffing);
-                transparentSniffing.put("routeOnly", false);
-                app.put("sniffing", transparentSniffing);
-            } else {
-                app.put("sniffing", sniffing);
-            }
+            // Transparent capture (macOS and the Windows ProxiFyre engine) supplies a locally resolved IP.
+            // Preserve the HTTP/TLS hostname for the proxy server instead of requiring that local DNS
+            // result to be trustworthy: a poisoned answer such as 10.10.34.x would otherwise match the
+            // private-address direct rule and leave the app's traffic direct.
+            Map<String, Object> transparentSniffing = new LinkedHashMap<>(sniffing);
+            transparentSniffing.put("routeOnly", false);
+            app.put("sniffing", transparentSniffing);
             inbounds.add(app);
         }
         for (int index = 0; index < customRoutes; index++) {

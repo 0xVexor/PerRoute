@@ -314,6 +314,11 @@ public final class AllTests {
         equal(XrayConfigGenerator.perAppPort(0), ((Map<String, Object>)smartInbounds.get(2)).get("port"));
         equal("perroute-app-1", ((Map<String, Object>)smartInbounds.get(3)).get("tag"));
         equal(XrayConfigGenerator.perAppPort(1), ((Map<String, Object>)smartInbounds.get(3)).get("port"));
+        for (int index = 2; index <= 3; index++) {
+            Map<String, Object> sniffing = (Map<String, Object>)((Map<String, Object>)smartInbounds.get(index)).get("sniffing");
+            equal(false, sniffing.get("routeOnly"));
+            equal(true, sniffing.get("enabled"));
+        }
         validateWithBundledXray(Json.stringify(smart));
     }
 

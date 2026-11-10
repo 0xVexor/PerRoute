@@ -87,7 +87,10 @@ public final class WindowsConnectionBackend implements ConnectionBackend, Startu
         if (desktop == null) desktop = new WindowsDesktopOperations(proxy(), perApp(), xray(), dataDirectory);
         return desktop;
     }
-    @Override public void applyPerApp(List<String> applications, boolean bypassLan) throws Exception { perApp().applyAndStart(applications,bypassLan); }
+    // ProxiFyre's LAN bypass skips every private destination, including the 10.x sinkhole addresses that some
+    // resolvers return for filtered domains, so those connections would hang outside the tunnel. Always hand
+    // private traffic to the core, whose built-in private-address rule still sends real LAN hosts direct.
+    @Override public void applyPerApp(List<String> applications, boolean bypassLan) throws Exception { perApp().applyAndStart(applications,false); }
     @Override public void applyRuntimePlan(XrayConfigGenerator.RuntimePlan plan) throws Exception { xray().applyRuntimePlan(plan); }
     @Override public Map<String,String> networkState() { return desktop().networkState(); }
     @Override public void resetSystemProxyLeftover(Map<String,String> baseline) { desktop().resetSystemProxyLeftover(baseline); }
@@ -147,7 +150,7 @@ public final class WindowsConnectionBackend implements ConnectionBackend, Startu
     @Override public void stopOrphan() { xray().stopOrphan(); }
     @Override public void addLogListener(Consumer<String> listener) { xray().addLogListener(listener); logListeners.add(listener); }
     @Override public void addRunningListener(Consumer<Boolean> listener) { xray().addStateListener(listener); }
-    @Override public void applyPerApp(List<String> applications) throws Exception { perApp().applyAndStart(applications); }
+    @Override public void applyPerApp(List<String> applications) throws Exception { applyPerApp(applications, false); }
     @Override public void restorePerApp() throws Exception { perApp().stopAndRestore(); }
     @Override public void stopPerAppSidecar() throws Exception { perApp().stopManagedSidecar(); }
     @Override public void applySystemProxy() throws Exception { proxy().apply(); }

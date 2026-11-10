@@ -1871,7 +1871,8 @@ class PerRouteController @JvmOverloads constructor(
             ConnectionMode.NATIVE_PER_APP -> HealthFinding("dns", "Name lookups", CheckStatus.WARN, "Name lookups use your normal DNS",
                 "Windows looks up names for the selected apps itself, through ${dns?.systemServers?.joinToString(", ")?.ifBlank { null } ?: "your DNS servers"}" +
                     (dns?.publicResolver?.let { ", which reaches the internet as $it" } ?: "") +
-                    ". The traffic goes through the tunnel, but your DNS provider can see which names are looked up. Turn on secure DNS (DNS over HTTPS) in Windows or in the browser to hide them.")
+                    ". The traffic goes through the tunnel, but your DNS provider can see which names are looked up. Turn on secure DNS (DNS over HTTPS) in Windows or in the browser to hide them. " +
+                    "For web traffic PerRoute reads the site name from the connection itself, so a fake address from your DNS provider does not break it; other traffic still needs a correct answer.")
             ConnectionMode.SYSTEM_PROXY -> HealthFinding("dns", "Name lookups", CheckStatus.INFO, "Browsers send names to the proxy",
                 "Apps that use the Windows proxy hand the site name to PerRoute, so it is looked up on the far side. Other apps look names up with your normal DNS.")
             else -> HealthFinding("dns", "Name lookups", CheckStatus.INFO, "Depends on each app", "Apps set to the SOCKS port can send names to the proxy; apps set to the HTTP port always do.")
@@ -1890,6 +1891,9 @@ class PerRouteController @JvmOverloads constructor(
                 connected && count != null && engine[app.perroute.netstate.NetworkStateKeys.ENGINE_LIMITED] != app.perroute.netstate.NetworkStateKeys.RUNNING && count != applications().size ->
                     HealthFinding("engine", "Per-app engine", CheckStatus.WARN, "The engine redirects ${plural(count, "app")}, not ${applications().size}",
                         "Its app list differs from your selection. Reconnect to bring them in line.", Repair.RECONNECT)
+                connected && engine[app.perroute.netstate.NetworkStateKeys.ENGINE_LIMITED] == app.perroute.netstate.NetworkStateKeys.RUNNING ->
+                    HealthFinding("engine", "Per-app engine", CheckStatus.PASS, "The selected apps are redirected",
+                        "The engine runs as your user, which is the normal mode. It cannot attribute traffic of apps running as Administrator or as a system service, so those stay direct.")
                 connected -> HealthFinding("engine", "Per-app engine", CheckStatus.PASS, "The selected apps are redirected", "The engine uses PerRoute's list of ${plural(applications().size, "app")}.")
                 else -> HealthFinding("engine", "Per-app engine", CheckStatus.INFO, "Not connected", if (redirecting && ours) "The kill switch holds the selected apps." else "The selected apps connect directly until you connect.")
             }

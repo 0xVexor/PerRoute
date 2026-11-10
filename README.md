@@ -353,7 +353,7 @@ The following describes Windows; see [macOS modes](#macos-version) for Mac behav
 
 | Mode | What it routes | Administrator | Notes |
 |---|---|---|---|
-| **Smart per-app** | Only the applications you select | Once, at install time | Works for applications with no proxy settings. Requires the per-app engine installed by the Full Installer. |
+| **Smart per-app** | Only the applications you select | Once, at install time | Works for applications with no proxy settings. Requires the per-app engine installed by the Full Installer. PerRoute runs the engine as your user, so apps running as Administrator or as a system service are not redirected. Web traffic is routed by the site name read from the connection, so fake addresses returned by a DNS provider do not break it. |
 | **System proxy** | Applications that follow Windows proxy settings | Never | The previous Windows proxy settings are saved and restored exactly. |
 | **Local proxy** | Applications you configure yourself | Never | SOCKS5 on `127.0.0.1:17890`, HTTP on `127.0.0.1:17891`. Nothing system-wide is changed. |
 
