@@ -60,6 +60,7 @@ final class V3DomainTests {
         run("Store apps: an updated app is found at its new folder", V3DomainTests::testStoreAppPaths);
         run("Store apps: the manifest logo is used when the shell has no icon", V3DomainTests::testStoreAppIcon);
         run("Issue log: handled problems stay visible", V3DomainTests::testIssueLog);
+        run("Application catalog: filtering and caching", V3DomainTests::testApplicationCatalog);
         run("Quality: unknown without evidence", V3DomainTests::testQualityUnknown);
         run("Quality: excellent, explained and deterministic", V3DomainTests::testQualityExcellent);
         run("Quality: port checks alone are capped", V3DomainTests::testQualityUnverifiedCap);
@@ -128,6 +129,30 @@ final class V3DomainTests {
             samples.add(QualitySample.tunnel(at + 1_000, true, tunnelMs + (i % 3), ""));
         }
         return samples;
+    }
+
+    private static void testApplicationCatalog() {
+        var backend = new ControllerTests.FakeBackend();
+        var now = new long[] { 1_000 };
+        var catalog = new app.perroute.compose.controller.ApplicationCatalog(backend, () -> now[0]);
+        var browser = new app.perroute.backend.api.ApplicationDescriptor("Browser", "C:\\Program Files\\Browser\\browser.exe");
+        var updater = new app.perroute.backend.api.ApplicationDescriptor("Browser Updater", "C:\\Program Files\\Browser\\updater.exe");
+        var shared = new app.perroute.backend.api.ApplicationDescriptor("Shared", "C:\\Program Files\\Common Files\\x\\shared.exe");
+        backend.installed = List.of(browser, updater, shared);
+        equal(List.of(browser), catalog.installed(false));
+
+        var chat = new app.perroute.backend.api.ApplicationDescriptor("Chat", "C:\\Program Files\\Chat\\chat.exe");
+        backend.installed = List.of(browser, chat);
+        now[0] += 60_000;
+        equal(List.of(browser), catalog.installed(false));
+        equal(List.of(browser, chat), catalog.installed(true));
+        backend.installed = List.of(chat);
+        now[0] += 301_000;
+        equal(List.of(chat), catalog.installed(false));
+        backend.installed = List.of(browser);
+        catalog.invalidate();
+        equal(List.of(browser), catalog.installed(false));
+        check(!app.perroute.compose.controller.ApplicationCatalog.Companion.isUserFacing("xray.exe", "C:\\Tools\\xray.exe"), "PerRoute's own engine is never offered");
     }
 
     private static void testIssueLog() throws Exception {
