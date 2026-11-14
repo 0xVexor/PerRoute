@@ -796,17 +796,9 @@ private fun rememberAppIcon(path: String): AppIcon? {
                     val image = png.inputStream().use { javax.imageio.ImageIO.read(it) } ?: return@runCatching null
                     return@runCatching AppIcon(image.toComposeImageBitmap(),darkGlyph(image))
                 }
-                val file = java.io.File(source)
-                if (!file.isFile) return@runCatching null
-                val icon = javax.swing.filechooser.FileSystemView.getFileSystemView().getSystemIcon(file, 64, 64) ?: return@runCatching null
-                val image = java.awt.image.BufferedImage(icon.iconWidth.coerceAtLeast(1), icon.iconHeight.coerceAtLeast(1), java.awt.image.BufferedImage.TYPE_INT_ARGB)
-                val graphics = image.createGraphics()
-                try {
-                    graphics.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
-                    icon.paintIcon(null, graphics, 0, 0)
-                } finally { graphics.dispose() }
+                val image = app.perroute.service.WindowsAppIcons.load(java.nio.file.Path.of(source)) ?: return@runCatching null
                 AppIcon(image.toComposeImageBitmap(), darkGlyph(image))
-            }.getOrNull()
+            }.onFailure { app.perroute.service.IssueLog.record(app.perroute.service.WindowsAppIcons.SOURCE, "No icon for $source", it) }.getOrNull()
             if (loaded != null || java.io.File(source).isFile) appIconCache[key] = java.util.Optional.ofNullable(loaded)
             loaded
         }

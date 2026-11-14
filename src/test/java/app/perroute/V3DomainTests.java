@@ -58,6 +58,10 @@ final class V3DomainTests {
 
     static void runAll() throws Exception {
         run("Store apps: an updated app is found at its new folder", V3DomainTests::testStoreAppPaths);
+        run("Store apps: the manifest logo is used when the shell has no icon", V3DomainTests::testStoreAppIcon);
+        run("Installed apps: Chrome-style App Paths registration", V3DomainTests::testAppPathsDiscovery);
+        run("Issue log: handled problems stay visible", V3DomainTests::testIssueLog);
+        run("Application catalog: filtering and caching", V3DomainTests::testApplicationCatalog);
         run("Quality: unknown without evidence", V3DomainTests::testQualityUnknown);
         run("Quality: excellent, explained and deterministic", V3DomainTests::testQualityExcellent);
         run("Quality: port checks alone are capped", V3DomainTests::testQualityUnverifiedCap);
@@ -126,6 +130,101 @@ final class V3DomainTests {
             samples.add(QualitySample.tunnel(at + 1_000, true, tunnelMs + (i % 3), ""));
         }
         return samples;
+    }
+
+    private static void testAppPathsDiscovery() {
+        String output = String.join("\r\n",
+                "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
+                "    (Default)    REG_SZ    C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                "    Path    REG_SZ    C:\\Program Files\\Google\\Chrome\\Application",
+                "",
+                "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\empty.exe",
+                "    (Default)    REG_SZ    (value not set)",
+                "");
+        var paths = app.perroute.service.InstalledApplicationDiscovery.parseAppPaths(output);
+        equal(2, paths.size());
+        equal("chrome.exe", paths.get(0).getFileName().toString());
+        var names = java.util.List.of("Google Chrome", "Notepad");
+        equal("Google Chrome", app.perroute.service.InstalledApplicationDiscovery.nameFor(paths.get(0), names));
+        equal(null, app.perroute.service.InstalledApplicationDiscovery.nameFor(java.nio.file.Path.of("C:\\tools\\ab.exe"), names));
+        equal(null, app.perroute.service.InstalledApplicationDiscovery.nameFor(java.nio.file.Path.of("C:\\tools\\hidden.exe"), names));
+        var start = app.perroute.service.InstalledApplicationDiscovery.parseStartExecutables(String.join("\n",
+                "START\tWord\tMicrosoft.Office.WINWORD.EXE.15",
+                "START\tManual\t{6D809377-6AF0-444B-8957-A3773F02200E}\\WinRAR\\Rar.txt",
+                "START\tWebsite\thttp://example.com/"),
+                java.util.List.of(java.nio.file.Path.of("C:\\Office\\WINWORD.EXE")));
+        equal(1, start.size());
+        equal("Word", start.get(0).name());
+    }
+
+    private static void testApplicationCatalog() {
+        var backend = new ControllerTests.FakeBackend();
+        var now = new long[] { 1_000 };
+        var catalog = new app.perroute.compose.controller.ApplicationCatalog(backend, () -> now[0]);
+        var browser = new app.perroute.backend.api.ApplicationDescriptor("Browser", "C:\\Program Files\\Browser\\browser.exe");
+        var updater = new app.perroute.backend.api.ApplicationDescriptor("Browser Updater", "C:\\Program Files\\Browser\\updater.exe");
+        var shared = new app.perroute.backend.api.ApplicationDescriptor("Shared", "C:\\Program Files\\Common Files\\x\\shared.exe");
+        backend.installed = List.of(browser, updater, shared);
+        equal(List.of(browser), catalog.installed(false));
+
+        var chat = new app.perroute.backend.api.ApplicationDescriptor("Chat", "C:\\Program Files\\Chat\\chat.exe");
+        backend.installed = List.of(browser, chat);
+        now[0] += 60_000;
+        equal(List.of(browser), catalog.installed(false));
+        equal(List.of(browser, chat), catalog.installed(true));
+        backend.installed = List.of(chat);
+        now[0] += 301_000;
+        equal(List.of(chat), catalog.installed(false));
+        backend.installed = List.of(browser);
+        catalog.invalidate();
+        equal(List.of(browser), catalog.installed(false));
+        check(!app.perroute.compose.controller.ApplicationCatalog.Companion.isUserFacing("xray.exe", "C:\\Tools\\xray.exe"), "PerRoute's own engine is never offered");
+    }
+
+    private static void testIssueLog() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("perroute-issues");
+        try {
+            java.nio.file.Path file = dir.resolve("sub").resolve("issues.log");
+            app.perroute.service.IssueLog.reset(file);
+            app.perroute.service.IssueLog.record("a", "first", new IllegalStateException("boom"));
+            app.perroute.service.IssueLog.record("b", "second");
+            equal(1, app.perroute.service.IssueLog.recent("a").size());
+            check(app.perroute.service.IssueLog.recent("a").get(0).message().contains("IllegalStateException - boom"), "The cause is kept with the message");
+            equal(2, app.perroute.service.IssueLog.recent().size());
+            check(java.nio.file.Files.readString(file).contains("[b] second"), "Issues are also written to the file");
+            app.perroute.service.IssueLog.reset(dir);
+            app.perroute.service.IssueLog.record("c", "an unwritable target must not throw");
+            equal(1, app.perroute.service.IssueLog.recent("c").size());
+        } finally {
+            app.perroute.service.IssueLog.reset(null);
+            try (var files = java.nio.file.Files.walk(dir)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
+    }
+
+    private static void testStoreAppIcon() throws Exception {
+        java.nio.file.Path root = java.nio.file.Files.createTempDirectory("perroute-store-icon");
+        try {
+            java.nio.file.Path assets = java.nio.file.Files.createDirectories(root.resolve("Assets"));
+            for (String name : new String[] { "App.scale-100.png", "App.scale-200.png", "App.targetsize-24.png", "App.targetsize-64.png",
+                    "App.targetsize-256.png", "App.targetsize-64_contrast-white.png", "Tile.scale-200.png" })
+                java.nio.file.Files.writeString(assets.resolve(name), "x");
+            java.nio.file.Files.writeString(root.resolve("AppxManifest.xml"), """
+                    <Package><Applications>
+                    <Application Id="Other" Executable="Other.exe"><uap:VisualElements Square150x150Logo="Assets\\Tile.png" Square44x44Logo="Assets\\Missing.png"/></Application>
+                    <Application Id="App" Executable="App.exe"><uap:VisualElements Square150x150Logo="Assets\\Tile.png" Square44x44Logo="Assets\\App.png"/></Application>
+                    </Applications></Package>""");
+            java.nio.file.Path found = app.perroute.service.StoreAppIcon.find(root.resolve("App.exe"));
+            check(found != null, "A packaged app's manifest logo is found");
+            equal("App.targetsize-64.png", found == null ? "" : found.getFileName().toString());
+            check(app.perroute.service.StoreAppIcon.find(root.resolve("Other.exe")) == null, "A missing logo gives no icon instead of a wrong one");
+            check(app.perroute.service.StoreAppIcon.find(java.nio.file.Path.of("C:\\NoPackage\\x.exe")) == null, "A non-packaged app has no manifest logo");
+        } finally {
+            try (var files = java.nio.file.Files.walk(root)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+            }
+        }
     }
 
     private static void testStoreAppPaths() {
