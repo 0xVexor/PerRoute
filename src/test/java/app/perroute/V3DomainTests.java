@@ -59,6 +59,7 @@ final class V3DomainTests {
     static void runAll() throws Exception {
         run("Store apps: an updated app is found at its new folder", V3DomainTests::testStoreAppPaths);
         run("Store apps: the manifest logo is used when the shell has no icon", V3DomainTests::testStoreAppIcon);
+        run("Installed apps: Chrome-style App Paths registration", V3DomainTests::testAppPathsDiscovery);
         run("Issue log: handled problems stay visible", V3DomainTests::testIssueLog);
         run("Application catalog: filtering and caching", V3DomainTests::testApplicationCatalog);
         run("Quality: unknown without evidence", V3DomainTests::testQualityUnknown);
@@ -129,6 +130,31 @@ final class V3DomainTests {
             samples.add(QualitySample.tunnel(at + 1_000, true, tunnelMs + (i % 3), ""));
         }
         return samples;
+    }
+
+    private static void testAppPathsDiscovery() {
+        String output = String.join("\r\n",
+                "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe",
+                "    (Default)    REG_SZ    C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                "    Path    REG_SZ    C:\\Program Files\\Google\\Chrome\\Application",
+                "",
+                "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\empty.exe",
+                "    (Default)    REG_SZ    (value not set)",
+                "");
+        var paths = app.perroute.service.InstalledApplicationDiscovery.parseAppPaths(output);
+        equal(2, paths.size());
+        equal("chrome.exe", paths.get(0).getFileName().toString());
+        var names = java.util.List.of("Google Chrome", "Notepad");
+        equal("Google Chrome", app.perroute.service.InstalledApplicationDiscovery.nameFor(paths.get(0), names));
+        equal(null, app.perroute.service.InstalledApplicationDiscovery.nameFor(java.nio.file.Path.of("C:\\tools\\ab.exe"), names));
+        equal(null, app.perroute.service.InstalledApplicationDiscovery.nameFor(java.nio.file.Path.of("C:\\tools\\hidden.exe"), names));
+        var start = app.perroute.service.InstalledApplicationDiscovery.parseStartExecutables(String.join("\n",
+                "START\tWord\tMicrosoft.Office.WINWORD.EXE.15",
+                "START\tManual\t{6D809377-6AF0-444B-8957-A3773F02200E}\\WinRAR\\Rar.txt",
+                "START\tWebsite\thttp://example.com/"),
+                java.util.List.of(java.nio.file.Path.of("C:\\Office\\WINWORD.EXE")));
+        equal(1, start.size());
+        equal("Word", start.get(0).name());
     }
 
     private static void testApplicationCatalog() {
