@@ -503,8 +503,8 @@ This produces the following in `dist/`:
 |---|---|
 | `PerRoute-Setup-3.7.1.exe` | Offline installer with the per-app engine |
 | `PerRoute-Portable-3.7.1.zip` | Self-contained portable build |
-| `PerRoute-Browser-3.7.0.zip` | The browser runtime and extension (embedded in the installer) |
-| `PerRoute-3.7.0/` | Unpacked application image |
+| `PerRoute-Browser-3.7.1.zip` | The browser runtime and extension (embedded in the installer) |
+| `PerRoute-3.7.1/` | Unpacked application image |
 
 The installer dependencies are downloaded on first use and verified against pinned SHA-256 digests. Building the browser extension also needs Node.js and Rust; see [browser/README.md](browser/README.md).
 
