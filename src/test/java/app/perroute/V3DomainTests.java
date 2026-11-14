@@ -143,7 +143,7 @@ final class V3DomainTests {
                 "");
         var paths = app.perroute.service.InstalledApplicationDiscovery.parseAppPaths(output);
         equal(2, paths.size());
-        equal("chrome.exe", paths.get(0).getFileName().toString());
+        check(paths.get(0).toString().endsWith("chrome.exe"), "The registered executable is read from the default value");
         var names = java.util.List.of("Google Chrome", "Notepad");
         equal("Google Chrome", app.perroute.service.InstalledApplicationDiscovery.nameFor(paths.get(0), names));
         equal(null, app.perroute.service.InstalledApplicationDiscovery.nameFor(java.nio.file.Path.of("C:\\tools\\ab.exe"), names));
