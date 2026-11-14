@@ -140,7 +140,7 @@ public final class InstalledApplicationDiscovery {
                 result.add(new InstalledApplication(fields[1].strip(), Path.of(root).resolve(folder.group(2)).normalize().toString()));
             } else if (office.matches()) {
                 String wanted = office.group(1).toLowerCase(Locale.ROOT) + ".exe";
-                registered.stream().filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).equals(wanted))
+                registered.stream().filter(path -> fileName(path).toLowerCase(Locale.ROOT).equals(wanted))
                         .findFirst().ifPresent(path -> result.add(new InstalledApplication(fields[1].strip(), path.toString())));
             }
         }
@@ -167,7 +167,7 @@ public final class InstalledApplicationDiscovery {
      * entry or an installed-programs entry that contains the executable's name). Anything else is usually a tool.
      */
     public static String nameFor(Path executable, List<String> knownNames) {
-        String stem = normalizeName(stripExe(executable.getFileName().toString()));
+        String stem = normalizeName(stripExe(fileName(executable)));
         if (stem.length() < 3) return null;
         return knownNames.stream().filter(name -> normalizeName(name).contains(stem)).findFirst().orElse(null);
     }
@@ -383,6 +383,12 @@ public final class InstalledApplicationDiscovery {
 
     private static String normalizeName(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+    }
+
+    /** The last segment of a path, whichever separator it uses (registry paths are Windows paths on any host). */
+    private static String fileName(Path path) {
+        String text = path.toString();
+        return text.substring(Math.max(text.lastIndexOf('\\'), text.lastIndexOf('/')) + 1);
     }
 
     private static String stripExe(String value) {
