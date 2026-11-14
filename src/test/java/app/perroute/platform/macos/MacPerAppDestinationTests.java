@@ -22,9 +22,9 @@ final class MacPerAppDestinationTests {
     static void run(XrayRuntime runtime, Path root) throws Exception {
         exchange(runtime, root, ApplicationIdentity.macExecutable("/fixture/Browser"), false, "browser-destination.test", true);
         exchange(runtime, root, ApplicationIdentity.macAppFamily("/fixture/Browser"), true, "browser-destination.test", true);
-        exchange(runtime, root, "C:\\Browser\\browser.exe", false, "8.8.4.4", true);
+        exchange(runtime, root, "C:\\Browser\\browser.exe", false, "browser-destination.test", true);
         exchange(runtime, root, ApplicationIdentity.macExecutable("/fixture/Browser"), false, "8.8.4.4", false);
-        System.out.println("macOS per-app destination: HTTP hostname and TLS SNI reach the upstream; Windows retains its original IP");
+        System.out.println("macOS per-app destination: HTTP hostname and TLS SNI reach the upstream for Windows and macOS apps; without per-app routing the original IP is kept");
     }
 
     private static void exchange(XrayRuntime runtime, Path root, String identity, boolean tls, String expected, boolean perApp) throws Exception {
