@@ -29,8 +29,8 @@ public final class StoreAppIcon {
             for (Path directory = executable.getParent(); directory != null; directory = directory.getParent()) {
                 Path manifest = directory.resolve("AppxManifest.xml");
                 if (!Files.isRegularFile(manifest)) continue;
-                String logo = logoOf(Files.readString(manifest, StandardCharsets.UTF_8), directory.relativize(executable).toString());
-                return logo == null ? null : bestVariant(directory.resolve(logo.replace('/', '\\')));
+                String logo = logoOf(Files.readString(manifest, StandardCharsets.UTF_8), directory.relativize(executable).toString().replace('/', '\\'));
+                return logo == null ? null : bestVariant(directory.resolve(logo.replace('\\', '/')));
             }
         } catch (IOException | RuntimeException ignored) {
         }
